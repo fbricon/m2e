@@ -70,7 +70,7 @@ public class MavenConfigurationImpl implements IMavenConfiguration, IPreferenceC
       ((IEclipsePreferences) preferencesLookup[0].parent()).removeNodeChangeListener(this);
       preferencesLookup[0].removePreferenceChangeListener(this);
     }
-    preferencesLookup[0] = new InstanceScope().getNode(IMavenConstants.PLUGIN_ID);
+    preferencesLookup[0] = InstanceScope.INSTANCE.getNode(IMavenConstants.PLUGIN_ID);
     ((IEclipsePreferences) preferencesLookup[0].parent()).addNodeChangeListener(this);
     preferencesLookup[0].addPreferenceChangeListener(this);
 
@@ -78,7 +78,7 @@ public class MavenConfigurationImpl implements IMavenConfiguration, IPreferenceC
       ((IEclipsePreferences) preferencesLookup[1].parent()).removeNodeChangeListener(this);
       preferencesLookup[1].removePreferenceChangeListener(this);
     }
-    preferencesLookup[1] = new DefaultScope().getNode(IMavenConstants.PLUGIN_ID);
+    preferencesLookup[1] = DefaultScope.INSTANCE.getNode(IMavenConstants.PLUGIN_ID);
     ((IEclipsePreferences) preferencesLookup[1].parent()).addNodeChangeListener(this);
   }
 
@@ -196,5 +196,16 @@ public class MavenConfigurationImpl implements IMavenConfiguration, IPreferenceC
     } else {
       throw new IllegalArgumentException();
     }
+  }
+  
+  public void setWorkspaceLifecycleMappings(String newMappings) {
+    if (newMappings == null) {
+      newMappings = "";
+    }
+    preferencesLookup[0].put(MavenPreferenceConstants.P_LIFECYCLE_MAPPINGS, newMappings);
+  }
+  
+  public String getWorkspaceLifecycleMappings() {
+    return preferenceStore.get(MavenPreferenceConstants.P_LIFECYCLE_MAPPINGS, "", preferencesLookup);
   }
 }

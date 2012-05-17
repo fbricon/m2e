@@ -24,7 +24,6 @@ import java.util.Set;
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.apache.maven.artifact.versioning.InvalidVersionSpecificationException;
 import org.apache.maven.artifact.versioning.VersionRange;
-import org.apache.maven.repository.internal.DefaultVersionRangeResolver;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.slf4j.Logger;
@@ -56,9 +55,10 @@ import org.eclipse.m2e.core.internal.lifecyclemapping.model.io.xpp3.LifecycleMap
 import org.eclipse.m2e.core.internal.lifecyclemapping.model.io.xpp3.LifecycleMappingMetadataSourceXpp3Writer;
 import org.eclipse.m2e.core.lifecyclemapping.model.PluginExecutionAction;
 import org.eclipse.m2e.core.project.configurator.MojoExecutionKey;
-import org.eclipse.m2e.core.ui.internal.UpdateConfigurationJob;
+import org.eclipse.m2e.core.ui.internal.UpdateMavenProjectJob;
 import org.eclipse.m2e.editor.xml.internal.Messages;
 
+@SuppressWarnings("restriction")
 public class WorkspaceLifecycleMappingProposal extends WorkbenchMarkerResolution implements ICompletionProposal, ICompletionProposalExtension5, IMarkerResolution {
   private static final Logger log = LoggerFactory.getLogger(WorkspaceLifecycleMappingProposal.class);
 
@@ -89,16 +89,15 @@ public class WorkspaceLifecycleMappingProposal extends WorkbenchMarkerResolution
    */
   private static LifecycleMappingMetadataSource getWorkspacePreferencesMetadataSources() {
     LifecycleMappingMetadataSource source = new LifecycleMappingMetadataSource();
-    String mapp = MavenPluginActivator.getDefault().getPluginPreferences().getString("XXX_mappings");
-    if (mapp != null) {
+    String mappings = MavenPluginActivator.getDefault().getMavenConfiguration().getWorkspaceLifecycleMappings();
+
+    if (mappings != null) {
       LifecycleMappingMetadataSourceXpp3Reader reader = new LifecycleMappingMetadataSourceXpp3Reader();
       try {
-        source = reader.read(new StringReader(mapp));
+        source = reader.read(new StringReader(mappings));
       } catch(IOException ex) {
-        // TODO Auto-generated catch block
         log.error(ex.getMessage(), ex);
       } catch(XmlPullParserException ex) {
-        // TODO Auto-generated catch block
         log.error(ex.getMessage(), ex);
       }
     }
@@ -111,30 +110,28 @@ public class WorkspaceLifecycleMappingProposal extends WorkbenchMarkerResolution
     String pluginArtifactId = mark.getAttribute(IMavenConstants.MARKER_ATTR_ARTIFACT_ID, ""); //$NON-NLS-1$
     String pluginVersion = mark.getAttribute(IMavenConstants.MARKER_ATTR_VERSION, ""); //$NON-NLS-1$
     String goal = mark.getAttribute(IMavenConstants.MARKER_ATTR_GOAL, ""); //$NON-NLS-1$
-    String id = pluginGroupId + ":" + pluginArtifactId;
-    MojoExecutionKey key = new MojoExecutionKey(pluginGroupId, pluginArtifactId, pluginVersion, goal, null, null);
     boolean found = false;
-        for (PluginExecutionMetadata pem : source.getPluginExecutions()) {
-          PluginExecutionFilter filter = pem.getFilter();
-          if (PluginExecutionAction.ignore.equals(pem.getAction())) {
-            if (filter.getGroupId().equals(pluginGroupId) && filter.getArtifactId().equals(pluginArtifactId)) {
-              found = true;
-              try {
-                VersionRange range = VersionRange.createFromVersionSpec(filter.getVersionRange());
-                DefaultArtifactVersion version = new DefaultArtifactVersion(pluginVersion);
-                if (!range.containsVersion(version)) {
-                  filter.setVersionRange("[" + pluginVersion + ",)");
-                }
-              } catch(InvalidVersionSpecificationException e) {
-                log.error(e.getMessage(), e);
-              }
-              if (!filter.getGoals().contains(goal)) {
-                filter.addGoal(goal);
-              }
-              break;
+    for(PluginExecutionMetadata pem : source.getPluginExecutions()) {
+      PluginExecutionFilter filter = pem.getFilter();
+      if(PluginExecutionAction.ignore.equals(pem.getAction())) {
+        if(filter.getGroupId().equals(pluginGroupId) && filter.getArtifactId().equals(pluginArtifactId)) {
+          found = true;
+          try {
+            VersionRange range = VersionRange.createFromVersionSpec(filter.getVersionRange());
+            DefaultArtifactVersion version = new DefaultArtifactVersion(pluginVersion);
+            if(!range.containsVersion(version)) {
+              filter.setVersionRange("[" + pluginVersion + ",)");
             }
+          } catch(InvalidVersionSpecificationException e) {
+            log.error(e.getMessage(), e);
           }
+          if(!filter.getGoals().contains(goal)) {
+            filter.addGoal(goal);
+          }
+          break;
         }
+      }
+    }
     if (!found) {
       PluginExecutionMetadata pe = new PluginExecutionMetadata();
       PluginExecutionFilter fil  = new PluginExecutionFilter(pluginGroupId, pluginArtifactId, "[" + pluginVersion + ",)", goal);
@@ -144,12 +141,7 @@ public class WorkspaceLifecycleMappingProposal extends WorkbenchMarkerResolution
       actionDom.addChild(new Xpp3Dom(PluginExecutionAction.ignore.name()));
       pe.setActionDom(actionDom);
     }
-    
-    
-    
   }
-
-
 
   public String getAdditionalProposalInfo() {
     return null;
@@ -207,12 +199,11 @@ public class WorkspaceLifecycleMappingProposal extends WorkbenchMarkerResolution
         LifecycleMappingMetadataSourceXpp3Writer writer = new LifecycleMappingMetadataSourceXpp3Writer();
         StringWriter sw = new StringWriter();
         writer.write(sw, source);
-        MavenPluginActivator.getDefault().getPluginPreferences().setValue("XXX_mappings", sw.toString());
+        
+        MavenPluginActivator.getDefault().getMavenConfiguration().setWorkspaceLifecycleMappings(sw.toString());
         
         //now update the project
-        new UpdateConfigurationJob(new IProject[] {marker.getResource().getProject()}).schedule();
-        MavenPluginActivator.getDefault().savePluginPreferences();
-        
+        new UpdateMavenProjectJob(new IProject[] {marker.getResource().getProject()}).schedule();
       }
     } catch(IOException e) {
       log.error("Error generating code in pom.xml", e); //$NON-NLS-1$
@@ -222,8 +213,7 @@ public class WorkspaceLifecycleMappingProposal extends WorkbenchMarkerResolution
   }
 
   public String getDescription() {
-    // TODO Auto-generated method stub
-    return null;
+    return getDisplayString();
   }
 
   @Override
@@ -255,14 +245,14 @@ public class WorkspaceLifecycleMappingProposal extends WorkbenchMarkerResolution
         LifecycleMappingMetadataSourceXpp3Writer writer = new LifecycleMappingMetadataSourceXpp3Writer();
         StringWriter sw = new StringWriter();
         writer.write(sw, source);
-        MavenPluginActivator.getDefault().getPluginPreferences().setValue("XXX_mappings", sw.toString());
         
-        MavenPluginActivator.getDefault().savePluginPreferences();
+        MavenPluginActivator.getDefault().getMavenConfiguration().setWorkspaceLifecycleMappings(sw.toString());
+
         for (IMarker mark : markers) {
           mark.delete();
         }
         //now update the projects
-        new UpdateConfigurationJob(prjs.toArray(new IProject[0])).schedule();
+        new UpdateMavenProjectJob(prjs.toArray(new IProject[0])).schedule();
         
       }
     } catch(IOException e) {

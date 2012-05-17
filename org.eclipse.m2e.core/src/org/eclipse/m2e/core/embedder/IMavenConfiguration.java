@@ -66,5 +66,9 @@ public interface IMavenConfiguration {
 
   public boolean isHideFoldersOfNestedProjects();
 
+  // lifecycle mappings
   
+  public void setWorkspaceLifecycleMappings(String newMapping);
+  
+  public String getWorkspaceLifecycleMappings();  
 }

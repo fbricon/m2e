@@ -373,6 +373,7 @@ public class LifecycleMappingFactory {
   private static LifecycleMappingMetadataSource readMavenPluginEmbeddedMetadata(Artifact artifact, InputStream is)
       throws IOException, XmlPullParserException {
     return new LifecycleMappingMetadataSourceXpp3Reader().read(is);
+  }
 
   /**
    * @return

@@ -34,7 +34,7 @@ public class MavenPreferenceInitializer extends AbstractPreferenceInitializer {
    * @see org.eclipse.core.runtime.preferences.AbstractPreferenceInitializer#initializeDefaultPreferences()
    */
   public void initializeDefaultPreferences() {
-    IEclipsePreferences store = ((IScopeContext) new DefaultScope()).getNode(IMavenConstants.PLUGIN_ID);
+    IEclipsePreferences store = DefaultScope.INSTANCE.getNode(IMavenConstants.PLUGIN_ID);
 
     store.put(MavenPreferenceConstants.P_USER_SETTINGS_FILE, //
         MavenCli.DEFAULT_USER_SETTINGS_FILE.getAbsolutePath());
@@ -65,6 +65,8 @@ public class MavenPreferenceInitializer extends AbstractPreferenceInitializer {
     
     store.putBoolean(MavenPreferenceConstants.P_SHOW_CONSOLE_ON_ERR, true);
     store.putBoolean(MavenPreferenceConstants.P_SHOW_CONSOLE_ON_OUTPUT, false);
+    
+    store.put(MavenPreferenceConstants.P_LIFECYCLE_MAPPINGS, "");
   }
 
 }

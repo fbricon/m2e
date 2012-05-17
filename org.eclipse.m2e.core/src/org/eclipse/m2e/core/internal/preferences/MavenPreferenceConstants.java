@@ -88,4 +88,8 @@ public interface MavenPreferenceConstants {
 
   /** boolean **/
   public static final String P_DEFAULT_POM_EDITOR_PAGE = "eclipse.m2.defaultPomEditorPage"; //$NON-NLS-1$
+
+  /** string **/
+  public static final String P_LIFECYCLE_MAPPINGS = PREFIX + "lifecycleMappings"; //$NON-NLS-1$
+  
 }
