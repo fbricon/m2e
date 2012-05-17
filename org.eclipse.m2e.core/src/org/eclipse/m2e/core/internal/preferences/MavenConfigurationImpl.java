@@ -11,6 +11,11 @@
 
 package org.eclipse.m2e.core.internal.preferences;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.Map;
 
 import org.osgi.service.prefs.BackingStoreException;
@@ -36,6 +41,8 @@ import org.eclipse.m2e.core.embedder.IMavenConfiguration;
 import org.eclipse.m2e.core.embedder.IMavenConfigurationChangeListener;
 import org.eclipse.m2e.core.embedder.MavenConfigurationChangeEvent;
 import org.eclipse.m2e.core.internal.IMavenConstants;
+import org.eclipse.m2e.core.internal.MavenPluginActivator;
+import org.eclipse.m2e.core.internal.lifecyclemapping.LifecycleMappingFactory;
 
 
 public class MavenConfigurationImpl implements IMavenConfiguration, IPreferenceChangeListener, INodeChangeListener {
@@ -202,10 +209,45 @@ public class MavenConfigurationImpl implements IMavenConfiguration, IPreferenceC
     if (newMappings == null) {
       newMappings = "";
     }
-    preferencesLookup[0].put(MavenPreferenceConstants.P_LIFECYCLE_MAPPINGS, newMappings);
+    File mappingsFile = getWorkspaceLifecycleMappingsFile();
+    writeFile(newMappings, mappingsFile);
   }
   
   public String getWorkspaceLifecycleMappings() {
-    return preferenceStore.get(MavenPreferenceConstants.P_LIFECYCLE_MAPPINGS, "", preferencesLookup);
+    File mappingsFile = getWorkspaceLifecycleMappingsFile();
+    StringBuilder sb = new StringBuilder();
+    try {
+      BufferedReader in = new BufferedReader(new FileReader(mappingsFile));
+      String str;
+      while((str = in.readLine()) != null) {
+        sb.append(str);
+      }
+      in.close();
+      return sb.toString();
+    } catch(IOException e) {
+      log.error("Could not read workspace lifecycle mapping metadata file from: " + mappingsFile.getAbsolutePath(), e);
+    }
+    return "";
   }
+
+  /**
+   * @return
+   */
+  public File getWorkspaceLifecycleMappingsFile() {
+    return MavenPluginActivator.getDefault().getStateLocation()
+        .append(LifecycleMappingFactory.LIFECYCLE_MAPPING_METADATA_SOURCE_NAME).toFile();
+  }
+  
+  private static void writeFile(String newMappings, File mappingsFile) {
+    try {
+      FileWriter writer = new FileWriter(mappingsFile);
+      writer.write(newMappings);
+      writer.close();
+    } catch (IOException e) {
+      log.error("Could not write workspace lifecycle mapping metadata file to: " + mappingsFile.getAbsolutePath(), e);
+    }
+  }
+  
+  
+
 }

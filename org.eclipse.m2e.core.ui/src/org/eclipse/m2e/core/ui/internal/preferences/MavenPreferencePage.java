@@ -14,8 +14,12 @@ package org.eclipse.m2e.core.ui.internal.preferences;
 import org.eclipse.jface.preference.BooleanFieldEditor;
 import org.eclipse.jface.preference.FieldEditorPreferencePage;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.ui.IWorkbench;
@@ -75,7 +79,7 @@ public class MavenPreferencePage extends FieldEditorPreferencePage implements IW
     
     addField(new BooleanFieldEditor(MavenPreferenceConstants.P_HIDE_FOLDERS_OF_NESTED_PROJECTS, //
         Messages.MavenPreferencePage_hide, getFieldEditorParent()));
-
+    
     GridData comboCompositeGridData = new GridData();
     comboCompositeGridData.verticalIndent = 25;
     comboCompositeGridData.horizontalSpan = 3;
@@ -86,7 +90,14 @@ public class MavenPreferencePage extends FieldEditorPreferencePage implements IW
     comboComposite.setLayoutData(comboCompositeGridData);
     comboComposite.setLayout(new GridLayout(2, false));
 
-    // addSeparator();
+     addSeparator();
+     
+     Button editLifecyclesButton = new Button(getFieldEditorParent(), SWT.PUSH);
+     editLifecyclesButton.addSelectionListener(new SelectionAdapter() {
+      public void widgetSelected(SelectionEvent e) {
+        Editor
+      }
+    });
   }
 
   private void addSeparator() {
