@@ -14,7 +14,6 @@ package org.eclipse.m2e.core.internal.preferences;
 import org.eclipse.core.runtime.preferences.AbstractPreferenceInitializer;
 import org.eclipse.core.runtime.preferences.DefaultScope;
 import org.eclipse.core.runtime.preferences.IEclipsePreferences;
-import org.eclipse.core.runtime.preferences.IScopeContext;
 
 import org.apache.maven.cli.MavenCli;
 
@@ -65,8 +64,5 @@ public class MavenPreferenceInitializer extends AbstractPreferenceInitializer {
     
     store.putBoolean(MavenPreferenceConstants.P_SHOW_CONSOLE_ON_ERR, true);
     store.putBoolean(MavenPreferenceConstants.P_SHOW_CONSOLE_ON_OUTPUT, false);
-    
-    store.put(MavenPreferenceConstants.P_LIFECYCLE_MAPPINGS, "");
   }
-
 }

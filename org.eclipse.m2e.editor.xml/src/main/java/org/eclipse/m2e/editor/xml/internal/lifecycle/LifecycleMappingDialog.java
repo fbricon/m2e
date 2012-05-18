@@ -7,6 +7,7 @@
  *
  * Contributors:
  *      Sonatype, Inc. - initial API and implementation
+ *      Andrew Eisenberg - Work on Bug 350414
  *******************************************************************************/
 
 package org.eclipse.m2e.editor.xml.internal.lifecycle;
@@ -29,7 +30,10 @@ import org.eclipse.jface.viewers.StructuredSelection;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.CLabel;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.layout.GridData;
+import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Label;
@@ -63,6 +67,8 @@ public class LifecycleMappingDialog extends Dialog implements ISelectionChangedL
   private String goal;
 
   private MavenProject pluginProject;
+
+  private boolean workspaceSettings = false;
 
   public LifecycleMappingDialog(Shell parentShell, IFile pom, String pluginGroupId, String pluginArtifactId,
       String pluginVersion, String goal) {
@@ -98,8 +104,28 @@ public class LifecycleMappingDialog extends Dialog implements ISelectionChangedL
     status = new CLabel(container, SWT.WRAP);
     status.setLayoutData(new GridData(SWT.FILL, SWT.BOTTOM, true, false));
 
+    // separator
+    new Label(container, SWT.NONE);
+    
+    final Button workspaceSettingsButton = new Button(container, SWT.CHECK);
+    workspaceSettingsButton.setText("Place in workspace settings");
+    workspaceSettingsButton.addSelectionListener(new SelectionAdapter() {
+      @Override
+      public void widgetSelected(SelectionEvent e) {
+        pomComposite.setEnabled(!workspaceSettingsButton.getSelection());
+        workspaceSettings = workspaceSettingsButton.getSelection();
+      }
+    });
+    new Label(container, SWT.NONE).
+    setText("Checking this box will place the lifcecycle mapping metadata in workspace settings.\n" +
+        "To edit this, go to Preferences -> Maven and click on Open workspace lifecycle mappings metadata");
+    
     pluginProject = locatePlugin();
     return container;
+  }
+  
+  public boolean useWorkspaceSettings() {
+    return workspaceSettings;
   }
 
   @Override

@@ -7,6 +7,7 @@
  *
  * Contributors:
  *      Sonatype, Inc. - initial API and implementation
+ *      Andrew Eisenberg - Work on Bug 350414
  *******************************************************************************/
 
 package org.eclipse.m2e.core.internal.preferences;
@@ -87,6 +88,8 @@ public class MavenConfigurationImpl implements IMavenConfiguration, IPreferenceC
     }
     preferencesLookup[1] = DefaultScope.INSTANCE.getNode(IMavenConstants.PLUGIN_ID);
     ((IEclipsePreferences) preferencesLookup[1].parent()).addNodeChangeListener(this);
+    
+    ensureLifecycleMappingMetadataFile();
   }
 
   public String getGlobalSettingsFile() {
@@ -231,7 +234,8 @@ public class MavenConfigurationImpl implements IMavenConfiguration, IPreferenceC
   }
 
   /**
-   * @return
+   * Gets the workspace lifecycle mappings metadata file located in the .metadata directory
+   * @return the lifecycle mappings metadata file
    */
   public File getWorkspaceLifecycleMappingsFile() {
     return MavenPluginActivator.getDefault().getStateLocation()
@@ -248,6 +252,19 @@ public class MavenConfigurationImpl implements IMavenConfiguration, IPreferenceC
     }
   }
   
+  /**
+   * ensures that the worksoace lifecycle mapping metadata file exists
+   * and has the correct root
+   */
+  private void ensureLifecycleMappingMetadataFile() {
+    File workspaceLifecycleMappingsFile = getWorkspaceLifecycleMappingsFile();
+    if (!workspaceLifecycleMappingsFile.exists()) {
+      setWorkspaceLifecycleMappings(
+          "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + 
+          "<lifecycleMappingMetadata>\n" + 
+          "</lifecycleMappingMetadata>");
+    }
+  }
   
 
 }

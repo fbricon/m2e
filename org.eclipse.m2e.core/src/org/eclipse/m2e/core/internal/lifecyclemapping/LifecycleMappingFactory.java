@@ -7,6 +7,7 @@
  *
  * Contributors:
  *      Sonatype, Inc. - initial API and implementation
+ *      Andrew Eisenberg - Work on Bug 350414
  *******************************************************************************/
 
 package org.eclipse.m2e.core.internal.lifecyclemapping;
@@ -232,11 +233,12 @@ public class LifecycleMappingFactory {
 
     // List order
     // 1. this pom embedded, this pom referenced, parent embedded, parent referenced, grand parent embedded...
-    // 2. sources contributed by eclipse extensions
-    // 2. preferences in workspace 
-    // 3. sources contributed by eclipse extensions
-    // 4. maven-plugin embedded metadata
-    // 5. default source, if present
+    // 2. preferences in project  (*** not implemented yet)
+    // 3. preferebces in ancestor project  (*** not implemented yet)
+    // 4. preferences in workspace 
+    // 5. sources contributed by eclipse extensions
+    // 6. maven-plugin embedded metadata
+    // 7. default source, if present
     // TODO validate metadata and replace invalid entries with error mapping
     for(LifecycleMappingMetadataSource source : getPomMappingMetadataSources(mavenProject, templateRequest, monitor)) {
       metadataSources.add(new SimpleMappingMetadataSource(source));
@@ -379,19 +381,20 @@ public class LifecycleMappingFactory {
    * @return
    */
   private static LifecycleMappingMetadataSource getWorkspacePreferencesMetadataSources() {
-    LifecycleMappingMetadataSource source = new LifecycleMappingMetadataSource();
-    String mapp = MavenPluginActivator.getDefault().getPluginPreferences().getString("XXX_mappings");
-    if (mapp != null) {
+    LifecycleMappingMetadataSource source = null;
+    String mappings = MavenPluginActivator.getDefault().getMavenConfiguration().getWorkspaceLifecycleMappings();
+    if (mappings != null) {
       LifecycleMappingMetadataSourceXpp3Reader reader = new LifecycleMappingMetadataSourceXpp3Reader();
       try {
-        source = reader.read(new StringReader(mapp));
+        source = reader.read(new StringReader(mappings));
       } catch(IOException ex) {
-        // TODO Auto-generated catch block
         log.error(ex.getMessage(), ex);
       } catch(XmlPullParserException ex) {
-        // TODO Auto-generated catch block
         log.error(ex.getMessage(), ex);
       }
+    }
+    if (source == null) {
+      source = new LifecycleMappingMetadataSource();
     }
     return source;
   }
