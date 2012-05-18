@@ -367,6 +367,11 @@
       <name>Richard Gould</name>
       <organization>Sonatype Inc.</organization>
     </developer>
+    <developer>
+      <id>fbricon</id>
+      <name>Fred Bricon</name>
+      <organization>Red Hat Inc.</organization>
+    </developer>
   </developers>
 
   <mailingLists>
