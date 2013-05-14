@@ -113,6 +113,8 @@ public class MavenImportWizardPage extends AbstractMavenWizardPage {
 
   private Button btnDeselectTree;
 
+  protected boolean createDefaultWorkingSet = true;
+
   protected MavenImportWizardPage(ProjectImportConfiguration importConfiguration, List<IWorkingSet> workingSets) {
     super("MavenProjectImportWizardPage", importConfiguration); //$NON-NLS-1$
     this.workingSets = workingSets;
@@ -374,6 +376,16 @@ public class MavenImportWizardPage extends AbstractMavenWizardPage {
       }
     });
 
+    Button createWorkingSet = new Button(composite, SWT.CHECK);
+    createWorkingSet.setText("Create working set based on root project name");
+    createWorkingSet.setSelection(true);
+    createWorkingSet.setLayoutData(new GridData(SWT.LEFT, SWT.CENTER, false, false, 3, 1));
+    createWorkingSet.addSelectionListener(new SelectionAdapter() {
+      public void widgetSelected(SelectionEvent e) {
+        createDefaultWorkingSet = ((Button) e.widget).getSelection();
+      }
+    });
+
     this.workingSetGroup = new WorkingSetGroup(composite, workingSets, getShell());
 
     createAdvancedSettings(composite, new GridData(SWT.FILL, SWT.TOP, false, false, 3, 1));
@@ -559,6 +571,10 @@ public class MavenImportWizardPage extends AbstractMavenWizardPage {
     return false;
   }
 
+  boolean shouldCreateWorkingSetForRoot() {
+    return createDefaultWorkingSet;
+  }
+
   protected AbstractProjectScanner<MavenProjectInfo> getProjectScanner() {
     File root = workspaceRoot.getLocation().toFile();
     MavenModelManager modelManager = MavenPlugin.getMavenModelManager();
@@ -594,6 +610,11 @@ public class MavenImportWizardPage extends AbstractMavenWizardPage {
     }
 
     return checkedProjects;
+  }
+
+  public MavenProjectInfo getRootProject() {
+    Object[] elements = projectTreeViewer.getExpandedElements();
+    return elements == null || elements.length == 0 ? null : (MavenProjectInfo) elements[0];
   }
 
   /**
