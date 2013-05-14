@@ -29,6 +29,7 @@ import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.WorkspaceJob;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
@@ -46,6 +47,9 @@ import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
 import org.eclipse.ui.IImportWizard;
 import org.eclipse.ui.IWorkbench;
+import org.eclipse.ui.IWorkingSet;
+import org.eclipse.ui.IWorkingSetManager;
+import org.eclipse.ui.PlatformUI;
 
 import org.apache.maven.plugin.MojoExecution;
 import org.apache.maven.project.MavenProject;
@@ -74,6 +78,7 @@ import org.eclipse.m2e.core.ui.internal.editing.PomEdits;
 import org.eclipse.m2e.core.ui.internal.editing.PomEdits.OperationTuple;
 import org.eclipse.m2e.core.ui.internal.lifecyclemapping.ILifecycleMappingLabelProvider;
 
+
 /**
  * Maven Import Wizard
  * 
@@ -84,13 +89,15 @@ public class MavenImportWizard extends AbstractMavenProjectWizard implements IIm
 
   private static final Logger LOG = LoggerFactory.getLogger(MavenImportWizard.class);
 
-  private MavenImportWizardPage page;
+  MavenImportWizardPage page;
 
   private LifecycleMappingPage lifecycleMappingPage;
 
   private List<String> locations;
 
   private boolean showLocation = true;
+
+  private boolean basedirRemameRequired = false;
 
   private boolean initialized = false;
 
@@ -111,6 +118,10 @@ public class MavenImportWizard extends AbstractMavenProjectWizard implements IIm
       LifecycleMappingConfiguration mappingConfiguration) {
     this(importConfiguration, locations);
     this.mappingConfiguration = mappingConfiguration;
+  }
+
+  public void setBasedirRemameRequired(boolean basedirRemameRequired) {
+    this.basedirRemameRequired = basedirRemameRequired;
   }
 
   public void init(IWorkbench workbench, IStructuredSelection selection) {
@@ -136,6 +147,7 @@ public class MavenImportWizard extends AbstractMavenProjectWizard implements IIm
     page = new MavenImportWizardPage(importConfiguration, workingSets);
     page.setLocations(locations);
     page.setShowLocation(showLocation);
+    page.setBasedirRemameRequired(basedirRemameRequired);
     addPage(page);
 
     if(getDiscovery() != null) {
@@ -184,6 +196,22 @@ public class MavenImportWizard extends AbstractMavenProjectWizard implements IIm
     }
 
     if(doImport) {
+
+      String workingSetName = getRootProjectName();
+      if(page.shouldCreateWorkingSetForRoot() && projects.size() > 0 && workingSetName != null) {
+        IWorkingSetManager wsm = PlatformUI.getWorkbench().getWorkingSetManager();
+        IWorkingSet workingSet = wsm.getWorkingSet(workingSetName);
+        if(workingSet == null) {
+          workingSet = wsm.createWorkingSet(workingSetName, new IAdaptable[0]);
+          // TODO is there a constant we should be setting here?
+          workingSet.setId("org.eclipse.ui.resourceWorkingSetPage");
+          wsm.addWorkingSet(workingSet);
+        }
+        if(!workingSets.contains(workingSet)) {
+          workingSets.add(workingSet);
+        }
+      }
+
       final IRunnableWithProgress ignoreJob = new IRunnableWithProgress() {
 
         public void run(IProgressMonitor monitor) throws InvocationTargetException, InterruptedException {
@@ -265,6 +293,11 @@ public class MavenImportWizard extends AbstractMavenProjectWizard implements IIm
     return doImport;
   }
 
+  private String getRootProjectName() {
+    MavenProjectInfo rootProject = page.getRootProject();
+    return rootProject != null ? importConfiguration.getProjectName(rootProject.getModel()) : null;
+  }
+
   @Override
   public boolean canFinish() {
     IWizardPage currentPage = getContainer().getCurrentPage();
@@ -312,7 +345,7 @@ public class MavenImportWizard extends AbstractMavenProjectWizard implements IIm
     discoverProposals(mappingConfiguration, monitor);
   }
 
-  void discoverProposals(LifecycleMappingConfiguration mappingConfiguration, IProgressMonitor monitor)  {
+  void discoverProposals(LifecycleMappingConfiguration mappingConfiguration, IProgressMonitor monitor) {
     final IMavenDiscovery discovery = getDiscovery();
 
     if(discovery == null) {
@@ -331,9 +364,10 @@ public class MavenImportWizard extends AbstractMavenProjectWizard implements IIm
       MavenProject mavenProject = project.getMavenProject();
       List<MojoExecution> mojoExecutions = project.getMojoExecutions();
       try {
-        proposals.putAll(discovery.discover(mavenProject, mojoExecutions,
-            mappingConfiguration.getSelectedProposals(),
-            SubMonitor.convert(monitor, NLS.bind(Messages.MavenImportWizard_analyzingProject, project.getRelpath()), 1)));
+        proposals
+            .putAll(discovery.discover(mavenProject, mojoExecutions, mappingConfiguration.getSelectedProposals(),
+                SubMonitor.convert(monitor,
+                    NLS.bind(Messages.MavenImportWizard_analyzingProject, project.getRelpath()), 1)));
       } catch(CoreException e) {
         //XXX we shall not swallow this exception but associate with the project/execution
         LOG.error(e.getMessage(), e);
@@ -350,7 +384,7 @@ public class MavenImportWizard extends AbstractMavenProjectWizard implements IIm
   }
 
   private boolean warnIncompleteMapping() {
-    if (!skipIncompleteWarning()) {
+    if(!skipIncompleteWarning()) {
       MessageDialogWithToggle dialog = MessageDialogWithToggle.open(MessageDialog.CONFIRM, getShell(),
           Messages.MavenImportWizard_titleIncompleteMapping, Messages.MavenImportWizard_messageIncompleteMapping,
           Messages.MavenImportWizard_hideWarningMessage, false, null, null, SWT.SHEET);

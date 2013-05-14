@@ -63,20 +63,21 @@ import org.apache.maven.archetype.ArchetypeGenerationResult;
 import org.apache.maven.archetype.catalog.Archetype;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.repository.ArtifactRepository;
-import org.apache.maven.execution.MavenExecutionRequest;
-import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Model;
 import org.apache.maven.project.MavenProject;
 
 import org.eclipse.m2e.core.MavenPlugin;
+import org.eclipse.m2e.core.embedder.ICallable;
 import org.eclipse.m2e.core.embedder.IMaven;
 import org.eclipse.m2e.core.embedder.IMavenConfiguration;
+import org.eclipse.m2e.core.embedder.IMavenExecutionContext;
 import org.eclipse.m2e.core.embedder.MavenModelManager;
 import org.eclipse.m2e.core.internal.IMavenConstants;
 import org.eclipse.m2e.core.internal.MavenPluginActivator;
 import org.eclipse.m2e.core.internal.Messages;
 import org.eclipse.m2e.core.internal.archetype.ArchetypeCatalogFactory.RemoteCatalogFactory;
 import org.eclipse.m2e.core.internal.archetype.ArchetypeManager;
+import org.eclipse.m2e.core.internal.embedder.MavenExecutionContext;
 import org.eclipse.m2e.core.internal.lifecyclemapping.LifecycleMappingFactory;
 import org.eclipse.m2e.core.internal.markers.IMavenMarkerManager;
 import org.eclipse.m2e.core.internal.project.registry.ProjectRegistryManager;
@@ -94,17 +95,15 @@ import org.eclipse.m2e.core.project.configurator.AbstractProjectConfigurator;
 import org.eclipse.m2e.core.project.configurator.ILifecycleMapping;
 import org.eclipse.m2e.core.project.configurator.ProjectConfigurationRequest;
 
+
 /**
- * import Maven projects
- * update project configuration from Maven 
- * enable Maven nature
- * create new project
- *
+ * import Maven projects update project configuration from Maven enable Maven nature create new project
+ * 
  * @author igor
  */
 public class ProjectConfigurationManager implements IProjectConfigurationManager, IMavenProjectChangedListener,
     IResourceChangeListener {
-  private static final Logger log = LoggerFactory.getLogger(ProjectConfigurationManager.class);
+  /*package*/static final Logger log = LoggerFactory.getLogger(ProjectConfigurationManager.class);
 
   final ProjectRegistryManager projectManager;
 
@@ -117,7 +116,8 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
   final IMavenConfiguration mavenConfiguration;
 
   public ProjectConfigurationManager(IMaven maven, ProjectRegistryManager projectManager,
-      MavenModelManager mavenModelManager, IMavenMarkerManager mavenMarkerManager, IMavenConfiguration mavenConfiguration) {
+      MavenModelManager mavenModelManager, IMavenMarkerManager mavenMarkerManager,
+      IMavenConfiguration mavenConfiguration) {
     this.projectManager = projectManager;
     this.mavenModelManager = mavenModelManager;
     this.mavenMarkerManager = mavenMarkerManager;
@@ -125,51 +125,57 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
     this.mavenConfiguration = mavenConfiguration;
   }
 
-  public List<IMavenProjectImportResult> importProjects(Collection<MavenProjectInfo> projectInfos, ProjectImportConfiguration configuration, IProgressMonitor monitor) throws CoreException {
-    long t1 = System.currentTimeMillis();
-    
-    SubMonitor progress = SubMonitor.convert(monitor, Messages.ProjectConfigurationManager_task_importing, 100);
+  public List<IMavenProjectImportResult> importProjects(final Collection<MavenProjectInfo> projectInfos,
+      final ProjectImportConfiguration configuration, final IProgressMonitor monitor) throws CoreException {
 
-    ArrayList<IMavenProjectImportResult> result = new ArrayList<IMavenProjectImportResult>();
-    ArrayList<IProject> projects = new ArrayList<IProject>();
+    final SubMonitor progress = SubMonitor.convert(monitor, Messages.ProjectConfigurationManager_task_importing, 100);
 
-    SubMonitor subProgress =
-      SubMonitor.convert( progress.newChild( 10 ), projectInfos.size() * 100 );
+    // overall execution context to share repository session data and cache for all projects
+    return maven.execute(new ICallable<List<IMavenProjectImportResult>>() {
+      public List<IMavenProjectImportResult> call(IMavenExecutionContext context, IProgressMonitor monitor)
+          throws CoreException {
+        long t1 = System.currentTimeMillis();
+        ArrayList<IMavenProjectImportResult> result = new ArrayList<IMavenProjectImportResult>();
+        ArrayList<IProject> projects = new ArrayList<IProject>();
 
-    // first, create all projects with basic configuration
-    for(MavenProjectInfo projectInfo : projectInfos) {
-      if(monitor.isCanceled()) {
-        throw new OperationCanceledException();
+        // first, create all projects with basic configuration
+        for(MavenProjectInfo projectInfo : projectInfos) {
+          if(monitor.isCanceled()) {
+            throw new OperationCanceledException();
+          }
+
+          SubMonitor subProgress = SubMonitor.convert(progress.newChild(10), projectInfos.size() * 100);
+          IProject project = create(projectInfo, configuration, subProgress.newChild(100));
+
+          result.add(new MavenProjectImportResult(projectInfo, project));
+
+          if(project != null) {
+            projects.add(project);
+          }
+        }
+
+        hideNestedProjectsFromParents(projects);
+        // then configure maven for all projects
+        configureNewMavenProjects(projects, progress.newChild(90));
+
+        long t2 = System.currentTimeMillis();
+        log.info("Project import completed " + ((t2 - t1) / 1000) + " sec");
+
+        return result;
       }
+    }, monitor);
 
-      IProject project = create(projectInfo, configuration, subProgress.newChild(100));
-
-      result.add(new MavenProjectImportResult(projectInfo, project));
-
-      if (project != null) {
-        projects.add(project);
-      }
-    }
-
-    hideNestedProjectsFromParents(projects);
-    // then configure maven for all projects
-    configureNewMavenProject(projects, progress.newChild(90));
-
-    long t2 = System.currentTimeMillis();
-    log.info("Project import completed " + ((t2 - t1) / 1000) + " sec");
-
-    return result;
   }
 
   private void setHidden(IResource resource) {
     try {
       resource.setHidden(true);
-    } catch (Exception ex) {
+    } catch(Exception ex) {
       log.error("Failed to hide resource; " + resource.getLocation().toOSString(), ex);
     }
   }
-  
-  private void hideNestedProjectsFromParents(List<IProject> projects) {
+
+  /*package*/void hideNestedProjectsFromParents(List<IProject> projects) {
 
     if(!MavenPlugin.getMavenConfiguration().isHideFoldersOfNestedProjects()) {
       return;
@@ -194,20 +200,20 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
       }
     }
   }
-  
-  private void configureNewMavenProject(List<IProject> projects, IProgressMonitor monitor)
+
+  /*package*/void configureNewMavenProjects(final List<IProject> projects, IProgressMonitor monitor)
       throws CoreException {
-    SubMonitor progress = SubMonitor.convert(monitor, Messages.ProjectConfigurationManager_task_configuring, 100);
+    final SubMonitor progress = SubMonitor.convert(monitor, Messages.ProjectConfigurationManager_task_configuring, 100);
 
     //SubProgressMonitor sub = new SubProgressMonitor(monitor, projects.size()+1);
-    
+
     // first, resolve maven dependencies for all projects
-    MavenUpdateRequest updateRequest = new MavenUpdateRequest(mavenConfiguration.isOffline(), false);
+    Set<IFile> pomFiles = new LinkedHashSet<IFile>();
     for(IProject project : projects) {
-      updateRequest.addPomFile(project);
+      pomFiles.add(project.getFile(IMavenConstants.POM_FILE_NAME));
     }
     progress.subTask(Messages.ProjectConfigurationManager_task_refreshing);
-    projectManager.refresh(updateRequest, progress.newChild(75));
+    projectManager.refresh(pomFiles, progress.newChild(75));
 
     // TODO this emits project change events, which may be premature at this point
 
@@ -217,9 +223,9 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
     for(IProject project : projects) {
       if(progress.isCanceled()) {
         throw new OperationCanceledException();
-      } 
+      }
       IMavenProjectFacade facade = projectManager.create(project, subProgress.newChild(100));
-      if (facade != null) {
+      if(facade != null) {
         facades.add(facade);
       }
     }
@@ -235,26 +241,22 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
       }
       progress.subTask(NLS.bind(Messages.ProjectConfigurationManager_task_updating, facade.getProject().getName()));
       MavenProject mavenProject = facade.getMavenProject(subProgress.newChild(5));
-      MavenSession mavenSession = createMavenSession(facade, subProgress.newChild(5));
-      ProjectConfigurationRequest request = new ProjectConfigurationRequest(facade, mavenProject, mavenSession);
+      ProjectConfigurationRequest request = new ProjectConfigurationRequest(facade, mavenProject);
       updateProjectConfiguration(request, subProgress.newChild(90));
     }
   }
 
-  private MavenSession createMavenSession(IMavenProjectFacade facade, IProgressMonitor monitor) throws CoreException {
-    MavenExecutionRequest request = projectManager.createExecutionRequest(facade.getPom(), facade.getResolverConfiguration(), monitor);
-    return maven.createSession(request, facade.getMavenProject(monitor));
-  }
-
   public void sortProjects(List<IMavenProjectFacade> facades, IProgressMonitor monitor) throws CoreException {
-      HashMap<MavenProject, IMavenProjectFacade> mavenProjectToFacadeMap = new HashMap<MavenProject, IMavenProjectFacade>(facades.size());
-      for(IMavenProjectFacade facade:facades) {
-        mavenProjectToFacadeMap.put(facade.getMavenProject(monitor), facade);
-      }
-      facades.clear();
-      for(MavenProject mavenProject: maven.getSortedProjects(new ArrayList<MavenProject>(mavenProjectToFacadeMap.keySet()))) {
-        facades.add(mavenProjectToFacadeMap.get(mavenProject));
-      }
+    HashMap<MavenProject, IMavenProjectFacade> mavenProjectToFacadeMap = new HashMap<MavenProject, IMavenProjectFacade>(
+        facades.size());
+    for(IMavenProjectFacade facade : facades) {
+      mavenProjectToFacadeMap.put(facade.getMavenProject(monitor), facade);
+    }
+    facades.clear();
+    for(MavenProject mavenProject : maven.getSortedProjects(new ArrayList<MavenProject>(mavenProjectToFacadeMap
+        .keySet()))) {
+      facades.add(mavenProjectToFacadeMap.get(mavenProject));
+    }
   }
 
   /**
@@ -286,17 +288,49 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
   }
 
   /**
-   * Returns project name to update status map
+   * Returns project name to update status map.
+   * <p/>
+   * TODO promote to API
    * 
    * @since 1.1
-   * 
-   * TODO promote to API
    */
-  public Map<String, IStatus> updateProjectConfiguration(MavenUpdateRequest request, boolean updateConfiguration,
-      boolean cleanProjects, IProgressMonitor monitor) {
+  public Map<String, IStatus> updateProjectConfiguration(final MavenUpdateRequest request,
+      final boolean updateConfiguration, final boolean cleanProjects, final IProgressMonitor monitor) {
+    return updateProjectConfiguration(request, updateConfiguration, cleanProjects, false/*refreshFromLocal*/, monitor);
+  }
 
-    monitor.beginTask(Messages.ProjectConfigurationManager_task_updating_projects, request.getPomFiles().size()
-        * (1 + (updateConfiguration ? 1 : 0) + (cleanProjects ? 1 : 0)));
+  /**
+   * Returns project name to update status map.
+   * <p/>
+   * TODO promote to API. TODO decide if workspace or other lock is required during execution of this method.
+   * 
+   * @since 1.4
+   */
+  public Map<String, IStatus> updateProjectConfiguration(final MavenUpdateRequest request,
+      final boolean updateConfiguration, final boolean cleanProjects, final boolean refreshFromLocal,
+      final IProgressMonitor monitor) {
+    try {
+      return maven.execute(request.isOffline(), request.isForceDependencyUpdate(),
+          new ICallable<Map<String, IStatus>>() {
+            public Map<String, IStatus> call(IMavenExecutionContext context, IProgressMonitor monitor) {
+              return updateProjectConfiguration0(request.getPomFiles(), updateConfiguration, cleanProjects,
+                  refreshFromLocal, monitor);
+            }
+          }, monitor);
+    } catch(CoreException ex) {
+      Map<String, IStatus> result = new LinkedHashMap<String, IStatus>();
+      for(IFile pomFile : request.getPomFiles()) {
+        result.put(pomFile.getProject().getName(), ex.getStatus());
+      }
+      return result;
+    }
+  }
+
+  /*package*/Map<String, IStatus> updateProjectConfiguration0(Collection<IFile> pomFiles, boolean updateConfiguration,
+      boolean cleanProjects, boolean refreshFromLocal, IProgressMonitor monitor) {
+
+    monitor.beginTask(Messages.ProjectConfigurationManager_task_updating_projects, pomFiles.size()
+        * (1 + (updateConfiguration ? 1 : 0) + (cleanProjects ? 1 : 0) + (refreshFromLocal ? 1 : 0)));
 
     long l1 = System.currentTimeMillis();
     log.info("Update started"); //$NON-NLS-1$
@@ -306,28 +340,46 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
     //project names to the errors encountered when updating them
     Map<String, IStatus> updateStatus = new HashMap<String, IStatus>();
 
-    // update all dependencies first
+    List<IFile> pomsToRefresh = new ArrayList<IFile>();
+
+    // refresh from local filesystem
+    if(refreshFromLocal) {
+      for(IFile pom : pomFiles) {
+        if(monitor.isCanceled()) {
+          throw new OperationCanceledException();
+        }
+
+        IProject project = pom.getProject();
+        try {
+          project.refreshLocal(IResource.DEPTH_INFINITE, new SubProgressMonitor(monitor, 1,
+              SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+          pomsToRefresh.add(pom);
+        } catch(CoreException ex) {
+          updateStatus.put(project.getName(), ex.getStatus());
+        }
+      }
+    } else {
+      pomsToRefresh.addAll(pomFiles);
+    }
+
+    // refresh projects and update all dependencies
     // this will ensure that project registry is up-to-date on GAV of all projects being updated
     // TODO this sends multiple update events, rework using low-level registry update methods
-    for(IFile pom : request.getPomFiles()) {
-      if(monitor.isCanceled()) {
-        throw new OperationCanceledException();
-      }
+    try {
+      projectManager.refresh(pomsToRefresh, new SubProgressMonitor(monitor, pomFiles.size()));
 
-      IProject project = pom.getProject();
-
-      monitor.subTask(project.getName());
-      
-      try {
-        SubProgressMonitor submonitor = new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL);
-        projectManager.refresh(new MavenUpdateRequest(project, request.isOffline(), request.isForceDependencyUpdate()),
-            submonitor);
+      for(IFile pom : pomsToRefresh) {
+        IProject project = pom.getProject();
         IMavenProjectFacade facade = projectManager.getProject(project);
         if(facade != null) { // facade is null if pom.xml cannot be read
           projects.put(pom, facade);
         }
         updateStatus.put(project.getName(), Status.OK_STATUS);
-      } catch(CoreException ex) {
+      }
+    } catch(CoreException ex) {
+      // TODO per-project status
+      for(IFile pom : pomsToRefresh) {
+        IProject project = pom.getProject();
         updateStatus.put(project.getName(), ex.getStatus());
       }
     }
@@ -347,7 +399,7 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
         SubProgressMonitor submonitor = new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL);
         try {
           ProjectConfigurationRequest cfgRequest = new ProjectConfigurationRequest(facade,
-              facade.getMavenProject(submonitor), createMavenSession(facade, submonitor));
+              facade.getMavenProject(submonitor));
           updateProjectConfiguration(cfgRequest, submonitor);
         } catch(CoreException ex) {
           iterator.remove();
@@ -373,7 +425,8 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
         SubProgressMonitor submonitor = new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL);
         try {
           // only rebuild projects that were successfully updated
-          if(!updateStatus.containsKey(project.getName())) {
+          IStatus status = updateStatus.get(project.getName());
+          if(status == null || status.isOK()) {
             project.build(IncrementalProjectBuilder.CLEAN_BUILD, submonitor);
             // TODO provide an option to build projects if the workspace is not autobuilding
           }
@@ -390,46 +443,51 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
     return updateStatus;
   }
 
-  private void updateProjectConfiguration(ProjectConfigurationRequest request,
-      IProgressMonitor monitor) throws CoreException {
-    IProject project = request.getProject();
+  private void updateProjectConfiguration(final ProjectConfigurationRequest request, IProgressMonitor monitor)
+      throws CoreException {
+    final IProject project = request.getProject();
     long start = System.currentTimeMillis();
-    IMavenProjectFacade mavenProjectFacade = request.getMavenProjectFacade();
+    final IMavenProjectFacade mavenProjectFacade = request.getMavenProjectFacade();
     log.debug("Updating project configuration for {}.", mavenProjectFacade.toString()); //$NON-NLS-1$
 
     addMavenNature(project, monitor);
 
     // Configure project file encoding
-    MavenProject mavenProject = request.getMavenProject();
+    final MavenProject mavenProject = request.getMavenProject();
     Properties mavenProperties = mavenProject.getProperties();
     String sourceEncoding = mavenProperties.getProperty("project.build.sourceEncoding");
     log.debug("Setting encoding for project {}: {}", project.getName(), sourceEncoding); //$NON-NLS-1$
     project.setDefaultCharset(sourceEncoding, monitor);
-    
-    ILifecycleMapping lifecycleMapping = getLifecycleMapping(mavenProjectFacade);
 
-    if(lifecycleMapping != null) {
-      mavenMarkerManager.deleteMarkers(mavenProjectFacade.getProject(), IMavenConstants.MARKER_CONFIGURATION_ID);
+    MavenExecutionContext executionContext = projectManager.createExecutionContext(mavenProjectFacade.getPom(),
+        mavenProjectFacade.getResolverConfiguration());
 
-      lifecycleMapping.configure(request, monitor);
+    executionContext.execute(mavenProject, new ICallable<Void>() {
+      public Void call(IMavenExecutionContext context, IProgressMonitor monitor) throws CoreException {
+        ILifecycleMapping lifecycleMapping = getLifecycleMapping(mavenProjectFacade);
 
-      LifecycleMappingConfiguration.persist(request.getMavenProjectFacade(), monitor);
-    } else {
-      log.debug("LifecycleMapping is null for project {}", mavenProjectFacade.toString()); //$NON-NLS-1$
-    }
+        if(lifecycleMapping != null) {
+          mavenMarkerManager.deleteMarkers(mavenProjectFacade.getProject(), IMavenConstants.MARKER_CONFIGURATION_ID);
+
+          lifecycleMapping.configure(request, monitor);
+
+          LifecycleMappingConfiguration.persist(request.getMavenProjectFacade(), monitor);
+        } else {
+          log.debug("LifecycleMapping is null for project {}", mavenProjectFacade.toString()); //$NON-NLS-1$
+        }
+        return null;
+      }
+    }, monitor);
 
     log.debug(
         "Updated project configuration for {} in {} ms.", mavenProjectFacade.toString(), System.currentTimeMillis() - start); //$NON-NLS-1$
   }
 
-  public void enableMavenNature(IProject project, ResolverConfiguration configuration, IProgressMonitor monitor)
-      throws CoreException {
+  public void enableMavenNature(final IProject project, ResolverConfiguration configuration,
+      final IProgressMonitor monitor) throws CoreException {
     monitor.subTask(Messages.ProjectConfigurationManager_task_enable_nature);
     enableBasicMavenNature(project, configuration, monitor);
-
-    ArrayList<IProject> projects = new ArrayList<IProject>();
-    projects.add(project);
-    configureNewMavenProject(projects, monitor);
+    configureNewMavenProjects(Collections.singletonList(project), monitor);
   }
 
   private void enableBasicMavenNature(IProject project, ResolverConfiguration configuration, IProgressMonitor monitor)
@@ -441,7 +499,7 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
   }
 
   private void addMavenNature(IProject project, IProgressMonitor monitor) throws CoreException {
-    if (!project.hasNature(IMavenConstants.NATURE_ID)) {
+    if(!project.hasNature(IMavenConstants.NATURE_ID)) {
       IProjectDescription description = project.getDescription();
       String[] prevNatures = description.getNatureIds();
       String[] newNatures = new String[prevNatures.length + 1];
@@ -456,11 +514,10 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
     monitor.subTask(Messages.ProjectConfigurationManager_task_disable_nature);
 
     IMavenProjectFacade facade = projectManager.create(project, monitor);
-    if(facade!=null) {
+    if(facade != null) {
       ILifecycleMapping lifecycleMapping = getLifecycleMapping(facade);
       if(lifecycleMapping != null) {
-        ProjectConfigurationRequest request = new ProjectConfigurationRequest(facade, facade.getMavenProject(monitor),
-            createMavenSession(facade, monitor));
+        ProjectConfigurationRequest request = new ProjectConfigurationRequest(facade, facade.getMavenProject(monitor));
         lifecycleMapping.unconfigure(request, monitor);
       }
     }
@@ -581,13 +638,13 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
     project.create(description, monitor);
     project.open(monitor);
     monitor.worked(1);
-    
+
     hideNestedProjectsFromParents(Collections.singletonList(project));
 
     monitor.worked(1);
 
     monitor.subTask(Messages.ProjectConfigurationManager_task_creating_pom);
-    IFile pomFile = project.getFile(IMavenConstants.POM_FILE_NAME);    
+    IFile pomFile = project.getFile(IMavenConstants.POM_FILE_NAME);
     mavenModelManager.createMavenModel(pomFile, model);
     monitor.worked(1);
 
@@ -628,65 +685,80 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
   /**
    * Creates project structure using Archetype and then imports created project(s)
    * 
-   * @deprecated use {@link #createArchetypeProjects(IPath, Archetype, String, String, 
-   * String, String, Properties, ProjectImportConfiguration, IProgressMonitor)}
+   * @deprecated use
+   *             {@link #createArchetypeProjects(IPath, Archetype, String, String, String, String, Properties, ProjectImportConfiguration, IProgressMonitor)}
    */
   @Deprecated
   public void createArchetypeProject(IProject project, IPath location, Archetype archetype, String groupId,
       String artifactId, String version, String javaPackage, Properties properties,
       ProjectImportConfiguration configuration, IProgressMonitor monitor) throws CoreException {
-    createArchetypeProjects(location, archetype, groupId, artifactId, version, javaPackage, properties, configuration, monitor);
+    createArchetypeProjects(location, archetype, groupId, artifactId, version, javaPackage, properties, configuration,
+        monitor);
   }
-  
+
   /**
    * Creates project structure using Archetype and then imports created project(s)
    * 
    * @return an unmodifiable list of created projects.
    * @since 1.1
    */
-  public List<IProject> createArchetypeProjects(IPath location, Archetype archetype, String groupId,
+  public List<IProject> createArchetypeProjects(final IPath location, final Archetype archetype, final String groupId,
+      final String artifactId, final String version, final String javaPackage, final Properties properties,
+      final ProjectImportConfiguration configuration, final IProgressMonitor monitor) throws CoreException {
+    return maven.execute(new ICallable<List<IProject>>() {
+      public List<IProject> call(IMavenExecutionContext context, IProgressMonitor monitor) throws CoreException {
+        return createArchetypeProjects0(location, archetype, groupId, artifactId, version, javaPackage, properties,
+            configuration, monitor);
+      }
+    }, monitor);
+  }
+
+  /*package*/List<IProject> createArchetypeProjects0(IPath location, Archetype archetype, String groupId,
       String artifactId, String version, String javaPackage, Properties properties,
       ProjectImportConfiguration configuration, IProgressMonitor monitor) throws CoreException {
     monitor.beginTask(NLS.bind(Messages.ProjectConfigurationManager_task_creating_project1, artifactId), 2);
 
     IWorkspaceRoot workspaceRoot = ResourcesPlugin.getWorkspace().getRoot();
-  
-    monitor.subTask(NLS.bind(Messages.ProjectConfigurationManager_task_executing_archetype, archetype.getGroupId(), archetype.getArtifactId()));
+
+    monitor.subTask(NLS.bind(Messages.ProjectConfigurationManager_task_executing_archetype, archetype.getGroupId(),
+        archetype.getArtifactId()));
     if(location == null) {
       // if the project should be created in the workspace, figure out the path
       location = workspaceRoot.getLocation();
     }
 
     List<IProject> createdProjects = new ArrayList<IProject>();
-    
+
     try {
-      
+
       Artifact artifact = resolveArchetype(archetype, monitor);
-      
-      ArchetypeGenerationRequest request = new ArchetypeGenerationRequest() //
-          .setTransferListener(maven.createTransferListener(monitor)) //
-          .setArchetypeGroupId(artifact.getGroupId()) //
-          .setArchetypeArtifactId(artifact.getArtifactId()) //
-          .setArchetypeVersion(artifact.getVersion()) //
-          .setArchetypeRepository(archetype.getRepository()) //
-          .setGroupId(groupId) //
-          .setArtifactId(artifactId) //
-          .setVersion(version) //
-          .setPackage(javaPackage) // the model does not have a package field
-          .setLocalRepository(maven.getLocalRepository()) //
-          .setRemoteArtifactRepositories(maven.getArtifactRepositories(true))
-          .setProperties(properties).setOutputDirectory(location.toPortableString());
 
-      MavenSession session = maven.createSession(maven.createExecutionRequest(monitor), null);
+      ArchetypeGenerationRequest request = new ArchetypeGenerationRequest()
+          //
+          .setTransferListener(maven.createTransferListener(monitor))
+          //
+          .setArchetypeGroupId(artifact.getGroupId())
+          //
+          .setArchetypeArtifactId(artifact.getArtifactId())
+          //
+          .setArchetypeVersion(artifact.getVersion())
+          //
+          .setArchetypeRepository(archetype.getRepository())
+          //
+          .setGroupId(groupId)
+          //
+          .setArtifactId(artifactId)
+          //
+          .setVersion(version)
+          //
+          .setPackage(javaPackage)
+          // the model does not have a package field
+          .setLocalRepository(maven.getLocalRepository())
+          //
+          .setRemoteArtifactRepositories(maven.getArtifactRepositories(true)).setProperties(properties)
+          .setOutputDirectory(location.toPortableString());
 
-      MavenSession oldSession = MavenPluginActivator.getDefault().setSession(session);
-
-      ArchetypeGenerationResult result;
-      try {
-        result = getArchetyper().generateProjectFromArchetype(request);
-      } finally {
-        MavenPluginActivator.getDefault().setSession(oldSession);
-      }
+      ArchetypeGenerationResult result = getArchetyper().generateProjectFromArchetype(request);
 
       Exception cause = result.getCause();
       if(cause != null) {
@@ -702,32 +774,33 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
       LocalProjectScanner scanner = new LocalProjectScanner(workspaceRoot.getLocation().toFile(), //
           projectFolder, true, mavenModelManager);
       scanner.run(monitor);
-      
+
       Set<MavenProjectInfo> projectSet = collectProjects(scanner.getProjects());
-      
+
       List<IMavenProjectImportResult> importResults = importProjects(projectSet, configuration, monitor);
-      for (IMavenProjectImportResult r : importResults) {
+      for(IMavenProjectImportResult r : importResults) {
         IProject p = r.getProject();
-        if (p != null && p.exists()) {
+        if(p != null && p.exists()) {
           createdProjects.add(p);
         }
       }
-      
+
       monitor.worked(1);
-    } catch (CoreException e) {
+    } catch(CoreException e) {
       throw e;
-    } catch (InterruptedException e) {
+    } catch(InterruptedException e) {
       throw new CoreException(Status.CANCEL_STATUS);
-    } catch (Exception ex) {
-      throw new CoreException(new Status(IStatus.ERROR, "org.eclipse.m2e", Messages.ProjectConfigurationManager_error_failed, ex)); //$NON-NLS-1$
+    } catch(Exception ex) {
+      throw new CoreException(new Status(IStatus.ERROR,
+          "org.eclipse.m2e", Messages.ProjectConfigurationManager_error_failed, ex)); //$NON-NLS-1$
     }
-    
+
     return Collections.unmodifiableList(createdProjects);
   }
 
   /**
-   * Apparently, Archetype#generateProjectFromArchetype 2.0-alpha-4 does not attempt to resolve archetype
-   * from configured remote repositories. To compensate, we populate local repo with archetype pom/jar.
+   * Apparently, Archetype#generateProjectFromArchetype 2.0-alpha-4 does not attempt to resolve archetype from
+   * configured remote repositories. To compensate, we populate local repo with archetype pom/jar.
    */
   private Artifact resolveArchetype(Archetype a, IProgressMonitor monitor) throws CoreException {
     ArrayList<ArtifactRepository> repos = new ArrayList<ArtifactRepository>();
@@ -737,32 +810,34 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
     String artifactRemoteRepository = a.getRepository();
 
     try {
-    
-      if (StringUtils.isBlank(artifactRemoteRepository)){
-        
+
+      if(StringUtils.isBlank(artifactRemoteRepository)) {
+
         IMavenConfiguration mavenConfiguration = MavenPlugin.getMavenConfiguration();
-        if (!mavenConfiguration.isOffline()){
+        if(!mavenConfiguration.isOffline()) {
           //Try to find the repository from remote catalog if needed
           final ArchetypeManager archetypeManager = MavenPluginActivator.getDefault().getArchetypeManager();
           RemoteCatalogFactory factory = archetypeManager.findParentCatalogFactory(a, RemoteCatalogFactory.class);
-          if (factory != null) {
-             //Grab the computed remote repository url
-              artifactRemoteRepository = factory.getRepositoryUrl();
-              a.setRepository(artifactRemoteRepository);//Hopefully will prevent further lookups for the same archetype
+          if(factory != null) {
+            //Grab the computed remote repository url
+            artifactRemoteRepository = factory.getRepositoryUrl();
+            a.setRepository(artifactRemoteRepository);//Hopefully will prevent further lookups for the same archetype
           }
         }
       }
-  
-      if (StringUtils.isNotBlank(artifactRemoteRepository)) {
-        ArtifactRepository archetypeRepository = maven.createArtifactRepository("archetype", a.getRepository().trim()); //$NON-NLS-1$
-        repos.add(0,archetypeRepository);//If the archetype doesn't exist locally, this will be the first remote repo to be searched.
+
+      if(StringUtils.isNotBlank(artifactRemoteRepository)) {
+        ArtifactRepository archetypeRepository = maven.createArtifactRepository(
+            a.getArtifactId() + "-repo", a.getRepository().trim()); //$NON-NLS-1$
+        repos.add(0, archetypeRepository);//If the archetype doesn't exist locally, this will be the first remote repo to be searched.
       }
-    
-      maven.resolve(a.getGroupId(), a.getArtifactId(),a.getVersion(), "pom", null, repos, monitor); //$NON-NLS-1$
-      return maven.resolve(a.getGroupId(), a.getArtifactId(),a.getVersion(), "jar", null, repos, monitor); //$NON-NLS-1$
-    } catch (CoreException e) {
+
+      maven.resolve(a.getGroupId(), a.getArtifactId(), a.getVersion(), "pom", null, repos, monitor); //$NON-NLS-1$
+      return maven.resolve(a.getGroupId(), a.getArtifactId(), a.getVersion(), "jar", null, repos, monitor); //$NON-NLS-1$
+    } catch(CoreException e) {
       StringBuilder sb = new StringBuilder();
-      sb.append(Messages.ProjectConfigurationManager_error_resolve).append(a.getGroupId()).append(':').append(a.getArtifactId()).append(':').append(a.getVersion());
+      sb.append(Messages.ProjectConfigurationManager_error_resolve).append(a.getGroupId()).append(':')
+          .append(a.getArtifactId()).append(':').append(a.getVersion());
       sb.append(Messages.ProjectConfigurationManager_error_resolve2);
       throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, sb.toString(), e));
     }
@@ -792,11 +867,12 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
     return ResourcesPlugin.getWorkspace().getRuleFactory().buildRule();
   }
 
-  private IProject create(MavenProjectInfo projectInfo, ProjectImportConfiguration configuration, IProgressMonitor monitor) throws CoreException {
+  /*package*/IProject create(MavenProjectInfo projectInfo, ProjectImportConfiguration configuration,
+      IProgressMonitor monitor) throws CoreException {
     IWorkspace workspace = ResourcesPlugin.getWorkspace();
     IWorkspaceRoot root = workspace.getRoot();
-    
-    File pomFile = projectInfo.getPomFile(); 
+
+    File pomFile = projectInfo.getPomFile();
     Model model = projectInfo.getModel();
     if(model == null) {
       model = maven.readModel(pomFile);
@@ -808,14 +884,15 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
     File projectDir = pomFile.getParentFile();
     String projectParent = projectDir.getParentFile().getAbsolutePath();
 
-    if (projectInfo.getBasedirRename() == MavenProjectInfo.RENAME_REQUIRED) {
+    if(projectInfo.getBasedirRename() == MavenProjectInfo.RENAME_REQUIRED) {
       File newProject = new File(projectDir.getParent(), projectName);
       if(!projectDir.equals(newProject)) {
         boolean renamed = projectDir.renameTo(newProject);
         if(!renamed) {
           StringBuilder msg = new StringBuilder();
-          msg.append(NLS.bind(Messages.ProjectConfigurationManager_error_rename, projectDir.getAbsolutePath())).append('.');
-          if (newProject.exists()) {
+          msg.append(NLS.bind(Messages.ProjectConfigurationManager_error_rename, projectDir.getAbsolutePath())).append(
+              '.');
+          if(newProject.exists()) {
             msg.append(NLS.bind(Messages.ProjectConfigurationManager_error_targetDir, newProject.getAbsolutePath()));
           }
           throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, msg.toString(), null));
@@ -903,14 +980,14 @@ public class ProjectConfigurationManager implements IProjectConfigurationManager
             mavenMarkerManager.deleteMarkers(oldFacade.getPom(), IMavenConstants.MARKER_CONFIGURATION_ID);
           }
         }
-      } catch (CoreException e) {
+      } catch(CoreException e) {
         log.error(e.getMessage(), e);
       }
     }
   }
 
   public ILifecycleMapping getLifecycleMapping(IMavenProjectFacade projectFacade) throws CoreException {
-    if (projectFacade==null) {
+    if(projectFacade == null) {
       return null;
     }
 

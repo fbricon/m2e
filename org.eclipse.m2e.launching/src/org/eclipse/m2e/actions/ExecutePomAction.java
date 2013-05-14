@@ -13,6 +13,9 @@ package org.eclipse.m2e.actions;
 
 import java.util.ArrayList;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.eclipse.core.resources.IContainer;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IFolder;
@@ -33,6 +36,7 @@ import org.eclipse.debug.core.ILaunchManager;
 import org.eclipse.debug.ui.DebugUITools;
 import org.eclipse.debug.ui.IDebugModelPresentation;
 import org.eclipse.debug.ui.IDebugUIConstants;
+import org.eclipse.debug.ui.ILaunchGroup;
 import org.eclipse.debug.ui.ILaunchShortcut;
 import org.eclipse.debug.ui.RefreshTab;
 import org.eclipse.jdt.core.IClasspathEntry;
@@ -45,6 +49,14 @@ import org.eclipse.jface.viewers.ILabelProviderListener;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.window.Window;
+import org.eclipse.osgi.util.NLS;
+import org.eclipse.swt.graphics.Image;
+import org.eclipse.swt.widgets.Shell;
+import org.eclipse.ui.IEditorInput;
+import org.eclipse.ui.IEditorPart;
+import org.eclipse.ui.IFileEditorInput;
+import org.eclipse.ui.dialogs.ElementListSelectionDialog;
+
 import org.eclipse.m2e.core.MavenPlugin;
 import org.eclipse.m2e.core.internal.IMavenConstants;
 import org.eclipse.m2e.core.project.IMavenProjectFacade;
@@ -54,15 +66,6 @@ import org.eclipse.m2e.core.ui.internal.M2EUIPluginActivator;
 import org.eclipse.m2e.internal.launch.LaunchingUtils;
 import org.eclipse.m2e.internal.launch.Messages;
 import org.eclipse.m2e.ui.internal.launch.MavenLaunchMainTab;
-import org.eclipse.osgi.util.NLS;
-import org.eclipse.swt.graphics.Image;
-import org.eclipse.swt.widgets.Shell;
-import org.eclipse.ui.IEditorInput;
-import org.eclipse.ui.IEditorPart;
-import org.eclipse.ui.IFileEditorInput;
-import org.eclipse.ui.dialogs.ElementListSelectionDialog;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -125,12 +128,11 @@ public class ExecutePomAction implements ILaunchShortcut, IExecutableExtension {
     }
   }
 
-  @SuppressWarnings("deprecation")
   private void launch(IContainer basecon, String mode) {
     if(basecon == null) {
       return;
     }
-    
+
     IContainer basedir = findPomXmlBasedir(basecon);
 
     ILaunchConfiguration launchConfiguration = getLaunchConfiguration(basedir, mode);
@@ -150,10 +152,9 @@ public class ExecutePomAction implements ILaunchShortcut, IExecutableExtension {
     }
 
     if(openDialog) {
-      DebugUITools.saveBeforeLaunch();
-      // ILaunchGroup group = DebugUITools.getLaunchGroup(launchConfiguration, mode);
-      DebugUITools.openLaunchConfigurationDialog(getShell(), launchConfiguration,
-          MavenLaunchMainTab.ID_EXTERNAL_TOOLS_LAUNCH_GROUP, null);
+      ILaunchGroup group = DebugUITools.getLaunchGroup(launchConfiguration, mode);
+      String groupId = group != null ? group.getIdentifier() : MavenLaunchMainTab.ID_EXTERNAL_TOOLS_LAUNCH_GROUP;
+      DebugUITools.openLaunchConfigurationDialog(getShell(), launchConfiguration, groupId, null);
     } else {
       DebugUITools.launch(launchConfiguration, mode);
     }
@@ -195,24 +196,26 @@ public class ExecutePomAction implements ILaunchShortcut, IExecutableExtension {
       ILaunchManager launchManager = DebugPlugin.getDefault().getLaunchManager();
       ILaunchConfigurationType launchConfigurationType = launchManager
           .getLaunchConfigurationType(MavenLaunchConstants.LAUNCH_CONFIGURATION_TYPE_ID);
-      
+
       String launchSafeGoalName = goal.replace(':', '-');
 
-      ILaunchConfigurationWorkingCopy workingCopy = launchConfigurationType.newInstance(null, //
-          NLS.bind(Messages.ExecutePomAction_executing, launchSafeGoalName, basedir.getLocation().toString().replace('/', '-')));
+      ILaunchConfigurationWorkingCopy workingCopy = launchConfigurationType.newInstance(
+          null, //
+          NLS.bind(Messages.ExecutePomAction_executing, launchSafeGoalName,
+              basedir.getLocation().toString().replace('/', '-')));
       workingCopy.setAttribute(MavenLaunchConstants.ATTR_POM_DIR, basedir.getLocation().toOSString());
       workingCopy.setAttribute(MavenLaunchConstants.ATTR_GOALS, goal);
       workingCopy.setAttribute(IDebugUIConstants.ATTR_PRIVATE, true);
       workingCopy.setAttribute(RefreshTab.ATTR_REFRESH_SCOPE, "${project}"); //$NON-NLS-1$
       workingCopy.setAttribute(RefreshTab.ATTR_REFRESH_RECURSIVE, true);
-      
+
       setProjectConfiguration(workingCopy, basedir);
 
       IPath path = getJREContainerPath(basedir);
       if(path != null) {
         workingCopy.setAttribute(IJavaLaunchConfigurationConstants.ATTR_JRE_CONTAINER_PATH, path.toPortableString());
       }
-      
+
       // TODO when launching Maven with debugger consider to add the following property
       // -Dmaven.surefire.debug="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=8000 -Xnoagent -Djava.compiler=NONE"
 
@@ -284,7 +287,8 @@ public class ExecutePomAction implements ILaunchShortcut, IExecutableExtension {
         ArrayList<ILaunchConfiguration> matchingConfigs = new ArrayList<ILaunchConfiguration>();
         for(ILaunchConfiguration configuration : launchConfigurations) {
           // substitute variables
-          String workDir = LaunchingUtils.substituteVar(configuration.getAttribute(MavenLaunchConstants.ATTR_POM_DIR, (String) null));
+          String workDir = LaunchingUtils.substituteVar(configuration.getAttribute(MavenLaunchConstants.ATTR_POM_DIR,
+              (String) null));
           if(workDir == null) {
             continue;
           }
@@ -293,11 +297,11 @@ public class ExecutePomAction implements ILaunchShortcut, IExecutableExtension {
             matchingConfigs.add(configuration);
           }
         }
-        
-        if(matchingConfigs.size()==1) {
+
+        if(matchingConfigs.size() == 1) {
           log.info("Using existing launch configuration");
           return matchingConfigs.get(0);
-        } else if(matchingConfigs.size()>1) {
+        } else if(matchingConfigs.size() > 1) {
           final IDebugModelPresentation labelProvider = DebugUITools.newDebugModelPresentation();
           ElementListSelectionDialog dialog = new ElementListSelectionDialog(getShell(), // 
               new ILabelProvider() {
@@ -336,7 +340,7 @@ public class ExecutePomAction implements ILaunchShortcut, IExecutableExtension {
               });
           dialog.setElements(matchingConfigs.toArray(new ILaunchConfiguration[matchingConfigs.size()]));
           dialog.setTitle(Messages.ExecutePomAction_dialog_title);
-          if (mode.equals(ILaunchManager.DEBUG_MODE)) {
+          if(mode.equals(ILaunchManager.DEBUG_MODE)) {
             dialog.setMessage(Messages.ExecutePomAction_dialog_debug_message);
           } else {
             dialog.setMessage(Messages.ExecutePomAction_dialog_run_message);
@@ -346,7 +350,7 @@ public class ExecutePomAction implements ILaunchShortcut, IExecutableExtension {
           labelProvider.dispose();
           return result == Window.OK ? (ILaunchConfiguration) dialog.getFirstResult() : null;
         }
-        
+
       } catch(CoreException ex) {
         log.error(ex.getMessage(), ex);
       }
@@ -354,13 +358,13 @@ public class ExecutePomAction implements ILaunchShortcut, IExecutableExtension {
 
     log.info("Creating new launch configuration");
 
-    String newName = launchManager.generateUniqueLaunchConfigurationNameFrom(basedirLocation.lastSegment());
+    String newName = launchManager.generateLaunchConfigurationName(basedirLocation.lastSegment());
     try {
       ILaunchConfigurationWorkingCopy workingCopy = launchConfigurationType.newInstance(null, newName);
       workingCopy.setAttribute(MavenLaunchConstants.ATTR_POM_DIR, basedirLocation.toString());
 
       setProjectConfiguration(workingCopy, basedir);
-      
+
       // set other defaults if needed
       // MavenLaunchMainTab maintab = new MavenLaunchMainTab();
       // maintab.setDefaults(workingCopy);

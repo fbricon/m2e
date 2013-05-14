@@ -20,7 +20,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -122,7 +121,6 @@ import org.apache.maven.project.ProjectBuildingResult;
 import org.apache.maven.project.ProjectSorter;
 import org.apache.maven.properties.internal.EnvironmentUtils;
 import org.apache.maven.repository.RepositorySystem;
-import org.apache.maven.repository.internal.MavenRepositorySystemSession;
 import org.apache.maven.settings.Mirror;
 import org.apache.maven.settings.Proxy;
 import org.apache.maven.settings.Server;
@@ -144,18 +142,19 @@ import org.apache.maven.wagon.proxy.ProxyInfo;
 
 import org.sonatype.aether.ConfigurationProperties;
 import org.sonatype.aether.RepositorySystemSession;
-import org.sonatype.aether.repository.LocalRepository;
 import org.sonatype.aether.resolution.ArtifactRequest;
 import org.sonatype.aether.resolution.ArtifactResolutionException;
 import org.sonatype.aether.resolution.ArtifactResult;
 import org.sonatype.aether.transfer.ArtifactNotFoundException;
 import org.sonatype.aether.transfer.TransferListener;
-import org.sonatype.aether.util.FilterRepositorySystemSession;
+import org.sonatype.aether.util.DefaultRepositorySystemSession;
 
+import org.eclipse.m2e.core.embedder.ICallable;
 import org.eclipse.m2e.core.embedder.ILocalRepositoryListener;
 import org.eclipse.m2e.core.embedder.IMaven;
 import org.eclipse.m2e.core.embedder.IMavenConfiguration;
 import org.eclipse.m2e.core.embedder.IMavenConfigurationChangeListener;
+import org.eclipse.m2e.core.embedder.IMavenExecutionContext;
 import org.eclipse.m2e.core.embedder.ISettingsChangeListener;
 import org.eclipse.m2e.core.embedder.MavenConfigurationChangeEvent;
 import org.eclipse.m2e.core.internal.IMavenConstants;
@@ -198,7 +197,18 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     mavenConfiguration.addConfigurationChangeListener(this);
   }
 
+  @SuppressWarnings("deprecation")
+  @Deprecated
   public MavenExecutionRequest createExecutionRequest(IProgressMonitor monitor) throws CoreException {
+    MavenExecutionRequest request = createExecutionRequest();
+
+    // logging
+    request.setTransferListener(createArtifactTransferListener(monitor));
+
+    return request;
+  }
+
+  /*package*/MavenExecutionRequest createExecutionRequest() throws CoreException {
     MavenExecutionRequest request = new DefaultMavenExecutionRequest();
 
     // this causes problems with unexpected "stale project configuration" error markers
@@ -223,9 +233,6 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     request.setLocalRepository(localRepository);
     request.setLocalRepositoryPath(localRepository.getBasedir());
     request.setOffline(mavenConfiguration.isOffline());
-
-    // logging
-    request.setTransferListener(createArtifactTransferListener(monitor));
 
     request.getUserProperties().put("m2e.version", MavenPluginActivator.getVersion()); //$NON-NLS-1$
     request.getUserProperties().put(ConfigurationProperties.USER_AGENT, MavenPluginActivator.getUserAgent());
@@ -255,6 +262,8 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     return path;
   }
 
+  @SuppressWarnings("deprecation")
+  @Deprecated
   public MavenExecutionResult execute(MavenExecutionRequest request, IProgressMonitor monitor) {
     // XXX is there a way to set per-request log level?
 
@@ -272,6 +281,7 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     return result;
   }
 
+  @SuppressWarnings("deprecation")
   public MavenSession createSession(MavenExecutionRequest request, MavenProject project) {
     RepositorySystemSession repoSession = createRepositorySession(request);
     MavenExecutionResult result = new DefaultMavenExecutionResult();
@@ -282,24 +292,19 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     return mavenSession;
   }
 
-  private RepositorySystemSession createRepositorySession(MavenExecutionRequest request) {
+  /*package*/FilterRepositorySystemSession createRepositorySession(MavenExecutionRequest request) {
     try {
-      RepositorySystemSession session = ((DefaultMaven) lookup(Maven.class)).newRepositorySession(request);
+      DefaultRepositorySystemSession session = (DefaultRepositorySystemSession) ((DefaultMaven) lookup(Maven.class))
+          .newRepositorySession(request);
       final String updatePolicy = mavenConfiguration.getGlobalUpdatePolicy();
-      if (!request.isUpdateSnapshots() && updatePolicy != null) {
-        session = new FilterRepositorySystemSession(session) {
-          public String getUpdatePolicy() {
-            return updatePolicy;
-          }
-        };
-      }
-      return session;
+      return new FilterRepositorySystemSession(session, request.isUpdateSnapshots() ? null : updatePolicy);
     } catch(CoreException ex) {
       log.error(ex.getMessage(), ex);
       throw new IllegalStateException("Could not look up Maven embedder", ex);
     }
   }
 
+  @SuppressWarnings("deprecation")
   public void execute(MavenSession session, MojoExecution execution, IProgressMonitor monitor) {
     Map<MavenProject, Set<Artifact>> artifacts = new HashMap<MavenProject, Set<Artifact>>();
     Map<MavenProject, MavenProjectMutableState> snapshots = new HashMap<MavenProject, MavenProjectMutableState>();
@@ -311,14 +316,7 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
       MojoExecutor mojoExecutor = lookup(MojoExecutor.class);
       DependencyContext dependencyContext = mojoExecutor.newDependencyContext(session,
           Collections.singletonList(execution));
-
-      // workaround for http://jira.codehaus.org/browse/MNG-5141
-      // use reflection until we can get maven 3.0.4+, which has MNG-5141 fixed
-      Method ensureDependenciesAreResolved = mojoExecutor.getClass().getDeclaredMethod("ensureDependenciesAreResolved",
-          MojoDescriptor.class, MavenSession.class, DependencyContext.class);
-      ensureDependenciesAreResolved.setAccessible(true);
-      ensureDependenciesAreResolved.invoke(mojoExecutor, execution.getMojoDescriptor(), session, dependencyContext);
-
+      mojoExecutor.ensureDependenciesAreResolved(execution.getMojoDescriptor(), session, dependencyContext);
       lookup(BuildPluginManager.class).executeMojo(session, execution);
     } catch(Exception ex) {
       session.getResult().addException(ex);
@@ -328,7 +326,7 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
         project.setResolvedArtifacts(null);
         project.setArtifacts(artifacts.get(project));
         MavenProjectMutableState snapshot = snapshots.get(project);
-        if (snapshot != null) {
+        if(snapshot != null) {
           snapshot.restore(project);
         }
       }
@@ -343,20 +341,20 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
       lookup(BuildPluginManager.class).getPluginRealm(session, mojoDescriptor.getPluginDescriptor());
       return clazz.cast(lookup(MavenPluginManager.class).getConfiguredMojo(Mojo.class, session, mojoExecution));
     } catch(PluginContainerException ex) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
-          NLS.bind(Messages.MavenImpl_error_mojo, mojoExecution), ex));
+      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, NLS.bind(
+          Messages.MavenImpl_error_mojo, mojoExecution), ex));
     } catch(PluginConfigurationException ex) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
-          NLS.bind(Messages.MavenImpl_error_mojo, mojoExecution), ex));
+      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, NLS.bind(
+          Messages.MavenImpl_error_mojo, mojoExecution), ex));
     } catch(ClassCastException ex) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
-          NLS.bind(Messages.MavenImpl_error_mojo, mojoExecution), ex));
+      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, NLS.bind(
+          Messages.MavenImpl_error_mojo, mojoExecution), ex));
     } catch(PluginResolutionException ex) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
-          NLS.bind(Messages.MavenImpl_error_mojo, mojoExecution), ex));
+      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, NLS.bind(
+          Messages.MavenImpl_error_mojo, mojoExecution), ex));
     } catch(PluginManagerException ex) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
-          NLS.bind(Messages.MavenImpl_error_mojo, mojoExecution), ex));
+      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, NLS.bind(
+          Messages.MavenImpl_error_mojo, mojoExecution), ex));
     }
   }
 
@@ -364,17 +362,30 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     lookup(MavenPluginManager.class).releaseMojo(mojo, mojoExecution);
   }
 
+  @SuppressWarnings("deprecation")
   public MavenExecutionPlan calculateExecutionPlan(MavenSession session, MavenProject project, List<String> goals,
       boolean setup, IProgressMonitor monitor) throws CoreException {
     try {
-      return lookup(LifecycleExecutor.class).calculateExecutionPlan(session, setup, goals.toArray(new String[goals.size()]));
+      return lookup(LifecycleExecutor.class).calculateExecutionPlan(session, setup,
+          goals.toArray(new String[goals.size()]));
     } catch(Exception ex) {
       throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, NLS.bind(
           Messages.MavenImpl_error_calc_build_plan, ex.getMessage()), ex));
     }
   }
-  
-  public MojoExecution setupMojoExecution(MavenSession session, MavenProject project, MojoExecution execution) throws CoreException {
+
+  public MavenExecutionPlan calculateExecutionPlan(final MavenProject project, final List<String> goals,
+      final boolean setup, final IProgressMonitor monitor) throws CoreException {
+    return context().execute(project, new ICallable<MavenExecutionPlan>() {
+      public MavenExecutionPlan call(IMavenExecutionContext context, IProgressMonitor monitor) throws CoreException {
+        return calculateExecutionPlan(context.getSession(), project, goals, setup, monitor);
+      }
+    }, monitor);
+  }
+
+  @SuppressWarnings("deprecation")
+  public MojoExecution setupMojoExecution(MavenSession session, MavenProject project, MojoExecution execution)
+      throws CoreException {
     MojoExecution clone = new MojoExecution(execution.getPlugin(), execution.getGoal(), execution.getExecutionId());
     clone.setMojoDescriptor(execution.getMojoDescriptor());
     if(execution.getConfiguration() != null) {
@@ -389,6 +400,15 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
           Messages.MavenImpl_error_calc_build_plan, ex.getMessage()), ex));
     }
     return clone;
+  }
+
+  public MojoExecution setupMojoExecution(final MavenProject project, final MojoExecution execution,
+      IProgressMonitor monitor) throws CoreException {
+    return context().execute(project, new ICallable<MojoExecution>() {
+      public MojoExecution call(IMavenExecutionContext context, IProgressMonitor monitor) throws CoreException {
+        return setupMojoExecution(context.getSession(), project, execution);
+      }
+    }, monitor);
   }
 
   public ArtifactRepository getLocalRepository() throws CoreException {
@@ -419,8 +439,7 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     boolean reload = force_reload || settings == null;
 
     if(!reload && userSettingsFile != null) {
-      reload = userSettingsFile.lastModified() != settings_timestamp
-          || userSettingsFile.length() != settings_length;
+      reload = userSettingsFile.lastModified() != settings_timestamp || userSettingsFile.length() != settings_length;
     }
 
     if(reload) {
@@ -460,8 +479,8 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     try {
       return lookup(SettingsBuilder.class).build(request).getEffectiveSettings();
     } catch(SettingsBuildingException ex) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, Messages.MavenImpl_error_read_settings,
-          ex));
+      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
+          Messages.MavenImpl_error_read_settings, ex));
     }
   }
 
@@ -469,8 +488,8 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     try {
       lookup(SettingsWriter.class).write(out, null, settings);
     } catch(IOException ex) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, Messages.MavenImpl_error_write_settings,
-          ex));
+      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
+          Messages.MavenImpl_error_write_settings, ex));
     }
   }
 
@@ -528,7 +547,8 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     try {
       return lookup(ModelReader.class).read(in, null);
     } catch(IOException e) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, Messages.MavenImpl_error_read_pom, e));
+      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
+          Messages.MavenImpl_error_read_pom, e));
     }
   }
 
@@ -541,7 +561,8 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
         IOUtil.close(is);
       }
     } catch(IOException e) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, Messages.MavenImpl_error_read_pom, e));
+      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
+          Messages.MavenImpl_error_read_pom, e));
     }
   }
 
@@ -549,45 +570,64 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     try {
       lookup(ModelWriter.class).write(out, null, model);
     } catch(IOException ex) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, Messages.MavenImpl_error_write_pom, ex));
+      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
+          Messages.MavenImpl_error_write_pom, ex));
     }
   }
 
-  public MavenProject readProject(File pomFile, IProgressMonitor monitor) throws CoreException {
-    try {
-      MavenExecutionRequest request = createExecutionRequest(monitor);
-      lookup(MavenExecutionRequestPopulator.class).populateDefaults(request);
-      ProjectBuildingRequest configuration = request.getProjectBuildingRequest();
-      configuration.setValidationLevel(ModelBuildingRequest.VALIDATION_LEVEL_MINIMAL);
-      configuration.setRepositorySession(createRepositorySession(request));
-      return lookup(ProjectBuilder.class).build(pomFile, configuration).getProject();
-    } catch(ProjectBuildingException ex) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, Messages.MavenImpl_error_read_project,
-          ex));
-    } catch(MavenExecutionRequestPopulationException ex) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, Messages.MavenImpl_error_read_project,
-          ex));
-    }
+  public MavenProject readProject(final File pomFile, IProgressMonitor monitor) throws CoreException {
+    return context().execute(new ICallable<MavenProject>() {
+      public MavenProject call(IMavenExecutionContext context, IProgressMonitor monitor) throws CoreException {
+        MavenExecutionRequest request = DefaultMavenExecutionRequest.copy(context.getExecutionRequest());
+        try {
+          lookup(MavenExecutionRequestPopulator.class).populateDefaults(request);
+          ProjectBuildingRequest configuration = request.getProjectBuildingRequest();
+          configuration.setValidationLevel(ModelBuildingRequest.VALIDATION_LEVEL_MINIMAL);
+          configuration.setRepositorySession(createRepositorySession(request));
+          return lookup(ProjectBuilder.class).build(pomFile, configuration).getProject();
+        } catch(ProjectBuildingException ex) {
+          throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
+              Messages.MavenImpl_error_read_project, ex));
+        } catch(MavenExecutionRequestPopulationException ex) {
+          throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
+              Messages.MavenImpl_error_read_project, ex));
+        }
+      }
+    }, monitor);
   }
 
+  @SuppressWarnings("deprecation")
   public MavenExecutionResult readProject(MavenExecutionRequest request, IProgressMonitor monitor) throws CoreException {
+    final RepositorySystemSession repositorySession = createRepositorySession(request);
+    return readMavenProject(request.getPom(), repositorySession, request);
+  }
+
+  @Deprecated
+  /*package*/MavenExecutionResult readMavenProject(File pomFile, RepositorySystemSession repositorySession,
+      MavenExecutionRequest request) throws CoreException {
+    ProjectBuildingRequest configuration = request.getProjectBuildingRequest();
+    configuration.setValidationLevel(ModelBuildingRequest.VALIDATION_LEVEL_MINIMAL);
+    configuration.setRepositorySession(repositorySession);
+    return readMavenProject(pomFile, configuration);
+  }
+
+  public MavenExecutionResult readMavenProject(File pomFile, ProjectBuildingRequest configuration) throws CoreException {
     long start = System.currentTimeMillis();
 
-    File pomFile = request.getPom();
     log.debug("Reading Maven project: {}", pomFile.getAbsoluteFile()); //$NON-NLS-1$
     MavenExecutionResult result = new DefaultMavenExecutionResult();
     try {
-      lookup(MavenExecutionRequestPopulator.class).populateDefaults(request);
-      ProjectBuildingRequest configuration = request.getProjectBuildingRequest();
       configuration.setValidationLevel(ModelBuildingRequest.VALIDATION_LEVEL_MINIMAL);
-      configuration.setRepositorySession(createRepositorySession(request));
       ProjectBuildingResult projectBuildingResult = lookup(ProjectBuilder.class).build(pomFile, configuration);
       result.setProject(projectBuildingResult.getProject());
       result.setDependencyResolutionResult(projectBuildingResult.getDependencyResolutionResult());
     } catch(ProjectBuildingException ex) {
-      return result.addException(ex);
-    } catch(MavenExecutionRequestPopulationException ex) {
-      return result.addException(ex);
+      if(ex.getResults() != null && ex.getResults().size() == 1) {
+        ProjectBuildingResult projectBuildingResult = ex.getResults().get(0);
+        result.setProject(projectBuildingResult.getProject());
+        result.setDependencyResolutionResult(projectBuildingResult.getDependencyResolutionResult());
+      }
+      result.addException(ex);
     } finally {
       log.debug("Read Maven project: {} in {} ms", pomFile.getAbsoluteFile(), System.currentTimeMillis() - start); //$NON-NLS-1$
     }
@@ -604,11 +644,19 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     project.getProjectBuildingRequest().setRepositorySession(lookup(ContextRepositorySystemSession.class));
   }
 
+  @SuppressWarnings("deprecation")
+  @Deprecated
   public MavenProject resolveParentProject(MavenExecutionRequest request, MavenProject child, IProgressMonitor monitor)
       throws CoreException {
-    ProjectBuildingRequest configuration = request.getProjectBuildingRequest();
+    final ProjectBuildingRequest configuration = request.getProjectBuildingRequest();
+    final RepositorySystemSession repositorySession = createRepositorySession(request);
+    return resolveParentProject(repositorySession, child, configuration);
+  }
+
+  /*package*/MavenProject resolveParentProject(RepositorySystemSession repositorySession, MavenProject child,
+      ProjectBuildingRequest configuration) throws CoreException {
     configuration.setValidationLevel(ModelBuildingRequest.VALIDATION_LEVEL_MINIMAL);
-    configuration.setRepositorySession(createRepositorySession(request));
+    configuration.setRepositorySession(repositorySession);
 
     try {
       configuration.setRemoteRepositories(child.getRemoteArtifactRepositories());
@@ -629,6 +677,15 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     return null;
   }
 
+  public MavenProject resolveParentProject(final MavenProject child, IProgressMonitor monitor) throws CoreException {
+    return context().execute(child, new ICallable<MavenProject>() {
+      public MavenProject call(IMavenExecutionContext context, IProgressMonitor monitor) throws CoreException {
+        return resolveParentProject(context.getRepositorySession(), child, context.getExecutionRequest()
+            .getProjectBuildingRequest());
+      }
+    }, monitor);
+  }
+
   public Artifact resolve(String groupId, String artifactId, String version, String type, String classifier,
       List<ArtifactRepository> remoteRepositories, IProgressMonitor monitor) throws CoreException {
     Artifact artifact = lookup(RepositorySystem.class).createArtifactWithClassifier(groupId, artifactId, version, type,
@@ -637,8 +694,16 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     return resolve(artifact, remoteRepositories, monitor);
   }
 
-  public Artifact resolve(Artifact artifact, List<ArtifactRepository> remoteRepositories,
-      IProgressMonitor monitor) throws CoreException {
+  private IMavenExecutionContext context() {
+    MavenExecutionContext context = MavenExecutionContext.getThreadContext();
+    if(context == null) {
+      context = new MavenExecutionContext(this);
+    }
+    return context;
+  }
+
+  public Artifact resolve(final Artifact artifact, List<ArtifactRepository> remoteRepositories, IProgressMonitor monitor)
+      throws CoreException {
     if(remoteRepositories == null) {
       try {
         remoteRepositories = getArtifactRepositories();
@@ -647,54 +712,48 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
         remoteRepositories = Collections.emptyList();
       }
     }
+    final List<ArtifactRepository> _remoteRepositories = remoteRepositories;
 
-    ArtifactRepository localRepository = getLocalRepository();
+    return context().execute(new ICallable<Artifact>() {
+      public Artifact call(IMavenExecutionContext context, IProgressMonitor monitor) throws CoreException {
+        org.sonatype.aether.RepositorySystem repoSystem = lookup(org.sonatype.aether.RepositorySystem.class);
 
-    org.sonatype.aether.RepositorySystem repoSystem = lookup(org.sonatype.aether.RepositorySystem.class);
+        ArtifactRequest request = new ArtifactRequest();
+        request.setArtifact(RepositoryUtils.toArtifact(artifact));
+        request.setRepositories(RepositoryUtils.toRepos(_remoteRepositories));
 
-    MavenRepositorySystemSession session = new MavenRepositorySystemSession();
-    session.setLocalRepositoryManager(repoSystem.newLocalRepositoryManager(new LocalRepository(localRepository
-        .getBasedir())));
-    session.setTransferListener(createArtifactTransferListener(monitor));
-
-    session.setConfigProperty(ConfigurationProperties.USER_AGENT, MavenPluginActivator.getUserAgent());
-
-    // FIXME update policy
-
-    ArtifactRequest request = new ArtifactRequest();
-    request.setArtifact(RepositoryUtils.toArtifact(artifact));
-    request.setRepositories(RepositoryUtils.toRepos(remoteRepositories));
-
-    ArtifactResult result;
-    try {
-      result = repoSystem.resolveArtifact(session, request);
-    } catch(ArtifactResolutionException ex) {
-      result = ex.getResults().get(0);
-    }
-
-    setLastUpdated(localRepository, remoteRepositories, artifact);
-
-    if(result.isResolved()) {
-      artifact.selectVersion(result.getArtifact().getVersion());
-      artifact.setFile(result.getArtifact().getFile());
-      artifact.setResolved(true);
-    } else {
-      ArrayList<IStatus> members = new ArrayList<IStatus>();
-      for(Exception e : result.getExceptions()) {
-        if(!(e instanceof ArtifactNotFoundException)) {
-          members.add(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, e.getMessage(), e));
+        ArtifactResult result;
+        try {
+          result = repoSystem.resolveArtifact(context.getRepositorySession(), request);
+        } catch(ArtifactResolutionException ex) {
+          result = ex.getResults().get(0);
         }
-      }
-      if(members.isEmpty()) {
-        members.add(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, NLS.bind(Messages.MavenImpl_error_missing, artifact), null));
-      }
-      IStatus[] newMembers = members.toArray(new IStatus[members.size()]);
-      throw new CoreException(new MultiStatus(IMavenConstants.PLUGIN_ID, -1, newMembers, NLS.bind(
-          Messages.MavenImpl_error_resolve, artifact.toString()),
-          null));
-    }
 
-    return artifact;
+        setLastUpdated(context.getLocalRepository(), _remoteRepositories, artifact);
+
+        if(result.isResolved()) {
+          artifact.selectVersion(result.getArtifact().getVersion());
+          artifact.setFile(result.getArtifact().getFile());
+          artifact.setResolved(true);
+        } else {
+          ArrayList<IStatus> members = new ArrayList<IStatus>();
+          for(Exception e : result.getExceptions()) {
+            if(!(e instanceof ArtifactNotFoundException)) {
+              members.add(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, e.getMessage(), e));
+            }
+          }
+          if(members.isEmpty()) {
+            members.add(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, NLS.bind(
+                Messages.MavenImpl_error_missing, artifact), null));
+          }
+          IStatus[] newMembers = members.toArray(new IStatus[members.size()]);
+          throw new CoreException(new MultiStatus(IMavenConstants.PLUGIN_ID, -1, newMembers, NLS.bind(
+              Messages.MavenImpl_error_resolve, artifact.toString()), null));
+        }
+
+        return artifact;
+      }
+    }, monitor);
   }
 
   public Artifact resolvePluginArtifact(Plugin plugin, List<ArtifactRepository> remoteRepositories,
@@ -710,7 +769,7 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     return repository.pathOf(artifact);
   }
 
-  private void setLastUpdated(ArtifactRepository localRepository, List<ArtifactRepository> remoteRepositories,
+  /*package*/void setLastUpdated(ArtifactRepository localRepository, List<ArtifactRepository> remoteRepositories,
       Artifact artifact) throws CoreException {
 
     Properties lastUpdated = loadLastUpdated(localRepository, artifact);
@@ -831,6 +890,7 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     return directory.replace(GROUP_SEPARATOR, PATH_SEPARATOR);
   }
 
+  @SuppressWarnings("deprecation")
   public <T> T getMojoParameterValue(MavenSession session, MojoExecution mojoExecution, String parameter,
       Class<T> asType) throws CoreException {
     try {
@@ -866,6 +926,16 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     }
   }
 
+  public <T> T getMojoParameterValue(final MavenProject project, final MojoExecution mojoExecution,
+      final String parameter, final Class<T> asType, final IProgressMonitor monitor) throws CoreException {
+    return context().execute(project, new ICallable<T>() {
+      public T call(IMavenExecutionContext context, IProgressMonitor monitor) throws CoreException {
+        return getMojoParameterValue(context.getSession(), mojoExecution, parameter, asType);
+      }
+    }, monitor);
+  }
+
+  @SuppressWarnings("deprecation")
   public <T> T getMojoParameterValue(String parameter, Class<T> type, MavenSession session, Plugin plugin,
       ConfigurationContainer configuration, String goal) throws CoreException {
     Xpp3Dom config = (Xpp3Dom) configuration.getConfiguration();
@@ -919,12 +989,22 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
           plexus.getContainerRealm(), expressionEvaluator, null);
       return type.cast(value);
     } catch(ComponentConfigurationException ex) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
-          Messages.MavenImpl_error_param, ex));
+      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, Messages.MavenImpl_error_param,
+          ex));
     } catch(ClassCastException ex) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
-          Messages.MavenImpl_error_param, ex));
+      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, Messages.MavenImpl_error_param,
+          ex));
     }
+  }
+
+  public <T> T getMojoParameterValue(final MavenProject project, final String parameter, final Class<T> type,
+      final Plugin plugin, final ConfigurationContainer configuration, final String goal, IProgressMonitor monitor)
+      throws CoreException {
+    return context().execute(project, new ICallable<T>() {
+      public T call(IMavenExecutionContext context, IProgressMonitor monitor) throws CoreException {
+        return getMojoParameterValue(parameter, type, context.getSession(), plugin, configuration, goal);
+      }
+    }, monitor);
   }
 
   /**
@@ -1002,10 +1082,10 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
 
   private void injectSettings(ArrayList<ArtifactRepository> repositories) throws CoreException {
     Settings settings = getSettings();
-
-    lookup(RepositorySystem.class).injectMirror(repositories, getMirrors());
-    lookup(RepositorySystem.class).injectProxy(repositories, settings.getProxies());
-    lookup(RepositorySystem.class).injectAuthentication(repositories, settings.getServers());
+    RepositorySystem repositorySystem = lookup(RepositorySystem.class);
+    repositorySystem.injectMirror(repositories, getMirrors());
+    repositorySystem.injectProxy(repositories, settings.getProxies());
+    repositorySystem.injectAuthentication(repositories, settings.getServers());
   }
 
   private void addDefaultRepository(ArrayList<ArtifactRepository> repositories) throws CoreException {
@@ -1028,8 +1108,8 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
         ArtifactRepository artifactRepository = lookup(RepositorySystem.class).buildArtifactRepository(repository);
         artifactRepositories.add(artifactRepository);
       } catch(InvalidRepositoryException ex) {
-        throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, Messages.MavenImpl_error_read_settings,
-            ex));
+        throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
+            Messages.MavenImpl_error_read_settings, ex));
       }
     }
   }
@@ -1171,19 +1251,18 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     }
   }
 
-  private <T> T lookup(Class<T> clazz) throws CoreException {
+  /*package*/<T> T lookup(Class<T> clazz) throws CoreException {
     try {
       return getPlexusContainer().lookup(clazz);
     } catch(ComponentLookupException ex) {
-      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1,
-          Messages.MavenImpl_error_lookup, ex));
+      throw new CoreException(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, -1, Messages.MavenImpl_error_lookup,
+          ex));
     }
   }
 
   private static DefaultPlexusContainer newPlexusContainer() throws PlexusContainerException {
     ContainerConfiguration mavenCoreCC = new DefaultContainerConfiguration().setClassWorld(
-        new ClassWorld(MAVEN_CORE_REALM_ID, ClassWorld.class.getClassLoader())).setName(
-        "mavenCore"); //$NON-NLS-1$
+        new ClassWorld(MAVEN_CORE_REALM_ID, ClassWorld.class.getClassLoader())).setName("mavenCore"); //$NON-NLS-1$
 
     mavenCoreCC.setAutoWiring(true);
 
@@ -1204,8 +1283,7 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     return classLoader;
   }
 
-  public void interpolateModel(MavenProject project, Model model)
-      throws CoreException {
+  public void interpolateModel(MavenProject project, Model model) throws CoreException {
     ModelBuildingRequest request = new DefaultModelBuildingRequest();
     request.setUserProperties(project.getProperties());
     ModelProblemCollector problems = new ModelProblemCollector() {
@@ -1214,4 +1292,35 @@ public class MavenImpl implements IMaven, IMavenConfigurationChangeListener {
     };
     lookup(ModelInterpolator.class).interpolateModel(model, project.getBasedir(), request, problems);
   }
+
+  public <V> V execute(boolean offline, boolean forceDependencyUpdate, ICallable<V> callable, IProgressMonitor monitor)
+      throws CoreException {
+    IMavenExecutionContext context = createExecutionContext();
+    context.getExecutionRequest().setOffline(offline);
+    context.getExecutionRequest().setUpdateSnapshots(forceDependencyUpdate);
+    return context.execute(callable, monitor);
+  }
+
+  public <V> V execute(ICallable<V> callable, IProgressMonitor monitor) throws CoreException {
+    return context().execute(callable, monitor);
+  }
+
+  public void execute(final MavenProject project, final MojoExecution execution, final IProgressMonitor monitor)
+      throws CoreException {
+    context().execute(project, new ICallable<Void>() {
+      public Void call(IMavenExecutionContext context, IProgressMonitor monitor) {
+        execute(context.getSession(), execution, monitor);
+        return null;
+      }
+    }, monitor);
+  }
+
+  public MavenExecutionContext createExecutionContext() {
+    return new MavenExecutionContext(this);
+  }
+
+  public MavenExecutionContext getExecutionContext() {
+    return MavenExecutionContext.getThreadContext();
+  }
+
 }

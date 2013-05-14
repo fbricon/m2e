@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008-2010 Sonatype, Inc.
+ * Copyright (c) 2008-2013 Sonatype, Inc.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -11,15 +11,15 @@
 
 package org.eclipse.m2e.core.ui.internal.wizards;
 
-import org.apache.maven.model.Model;
 import org.eclipse.core.resources.IContainer;
+import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.window.Window;
-import org.eclipse.m2e.core.ui.internal.Messages;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ModifyEvent;
 import org.eclipse.swt.events.ModifyListener;
@@ -29,6 +29,13 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.dialogs.ContainerSelectionDialog;
+
+import org.apache.maven.model.Model;
+
+import org.eclipse.m2e.core.MavenPlugin;
+import org.eclipse.m2e.core.project.conversion.IProjectConversionEnabler;
+import org.eclipse.m2e.core.project.conversion.IProjectConversionManager;
+import org.eclipse.m2e.core.ui.internal.Messages;
 
 
 /**
@@ -40,6 +47,8 @@ public class MavenPomWizardPage extends AbstractMavenWizardPage {
   private ISelection selection;
 
   private MavenArtifactComponent pomComponent;
+
+  private IProjectConversionEnabler projectConversionEnabler;
 
   public MavenPomWizardPage(ISelection selection) {
     super("wizardPage"); //$NON-NLS-1$
@@ -70,8 +79,6 @@ public class MavenPomWizardPage extends AbstractMavenWizardPage {
     projectText.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
     projectText.addModifyListener(modifyingListener);
 
-
-
     pomComponent = new MavenArtifactComponent(container, SWT.NONE);
     pomComponent.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true, 2, 1));
     pomComponent.setModifyingListener(modifyingListener);
@@ -89,6 +96,8 @@ public class MavenPomWizardPage extends AbstractMavenWizardPage {
    * Tests if the current workbench selection is a suitable container to use.
    */
   private void initialize() {
+    String packagingToUse = MavenArtifactComponent.DEFAULT_PACKAGING;
+    String[] availablePackagingTypes = MavenArtifactComponent.PACKAGING_OPTIONS;
     if(selection != null && !selection.isEmpty() && selection instanceof IStructuredSelection) {
       IStructuredSelection ssel = (IStructuredSelection) selection;
       if(ssel.size() > 1) {
@@ -105,11 +114,20 @@ public class MavenPomWizardPage extends AbstractMavenWizardPage {
         projectText.setText(container.getFullPath().toString());
         pomComponent.setArtifactId(container.getName());
         pomComponent.setGroupId(container.getName());
+        if(container instanceof IProject) {
+          IProjectConversionManager pcm = MavenPlugin.getProjectConversionManager();
+          projectConversionEnabler = pcm.getConversionEnablerForProject((IProject) container);
+          if(projectConversionEnabler != null) {
+            availablePackagingTypes = projectConversionEnabler.getPackagingTypes((IProject) container);
+            packagingToUse = availablePackagingTypes[0];
+          }
+        }
       }
     }
 
     pomComponent.setVersion(MavenArtifactComponent.DEFAULT_VERSION);
-    pomComponent.setPackaging(MavenArtifactComponent.DEFAULT_PACKAGING);
+    pomComponent.setPackagingTypes(availablePackagingTypes);
+    pomComponent.setPackaging(packagingToUse);
     pomComponent.setFocus();
   }
 
@@ -173,6 +191,14 @@ public class MavenPomWizardPage extends AbstractMavenWizardPage {
     if(!container.isAccessible()) {
       updateStatus(Messages.MavenPomWizardPage_error_folder_write);
       return;
+    }
+
+    if(container instanceof IProject && projectConversionEnabler != null) {
+      IStatus status = projectConversionEnabler.canBeConverted((IProject) container);
+      if(status.getSeverity() == IStatus.ERROR) {
+        updateStatus(status.getMessage());
+        return;
+      }
     }
 
     // TODO

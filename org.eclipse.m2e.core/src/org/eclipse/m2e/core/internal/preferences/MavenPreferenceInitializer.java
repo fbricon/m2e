@@ -14,7 +14,6 @@ package org.eclipse.m2e.core.internal.preferences;
 import org.eclipse.core.runtime.preferences.AbstractPreferenceInitializer;
 import org.eclipse.core.runtime.preferences.DefaultScope;
 import org.eclipse.core.runtime.preferences.IEclipsePreferences;
-import org.eclipse.core.runtime.preferences.IScopeContext;
 
 import org.apache.maven.cli.MavenCli;
 
@@ -34,11 +33,12 @@ public class MavenPreferenceInitializer extends AbstractPreferenceInitializer {
    * @see org.eclipse.core.runtime.preferences.AbstractPreferenceInitializer#initializeDefaultPreferences()
    */
   public void initializeDefaultPreferences() {
-    IEclipsePreferences store = ((IScopeContext) new DefaultScope()).getNode(IMavenConstants.PLUGIN_ID);
+    //Don't use DefaultScope.INSTANCE to maintain compatibility with helios
+    IEclipsePreferences store = new DefaultScope().getNode(IMavenConstants.PLUGIN_ID);
 
     store.put(MavenPreferenceConstants.P_USER_SETTINGS_FILE, //
         MavenCli.DEFAULT_USER_SETTINGS_FILE.getAbsolutePath());
-    
+
     store.put(MavenPreferenceConstants.P_GLOBAL_SETTINGS_FILE, ""); //$NON-NLS-1$
 
     store.putBoolean(MavenPreferenceConstants.P_DEBUG_OUTPUT, false);
@@ -60,11 +60,13 @@ public class MavenPreferenceInitializer extends AbstractPreferenceInitializer {
 
     store.putBoolean(MavenPreferenceConstants.P_UPDATE_INDEXES, true);
     store.putBoolean(MavenPreferenceConstants.P_UPDATE_PROJECTS, false);
-    
+
     store.putBoolean(MavenPreferenceConstants.P_HIDE_FOLDERS_OF_NESTED_PROJECTS, false);
-    
+
     store.putBoolean(MavenPreferenceConstants.P_SHOW_CONSOLE_ON_ERR, true);
     store.putBoolean(MavenPreferenceConstants.P_SHOW_CONSOLE_ON_OUTPUT, false);
-  }
 
+    // set to null since the plugin state location is not available by the time execution reaches here
+    store.remove(MavenPreferenceConstants.P_WORKSPACE_MAPPINGS_LOCATION);
+  }
 }

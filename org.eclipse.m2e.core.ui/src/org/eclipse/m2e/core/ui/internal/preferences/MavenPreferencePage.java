@@ -7,9 +7,13 @@
  *
  * Contributors:
  *      Sonatype, Inc. - initial API and implementation
+ *      Andrew Eisenberg - Work on Bug 350414
  *******************************************************************************/
 
 package org.eclipse.m2e.core.ui.internal.preferences;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.eclipse.jface.preference.BooleanFieldEditor;
 import org.eclipse.jface.preference.FieldEditorPreferencePage;
@@ -17,7 +21,6 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Label;
 import org.eclipse.ui.IWorkbench;
 import org.eclipse.ui.IWorkbenchPreferencePage;
 
@@ -27,6 +30,8 @@ import org.eclipse.m2e.core.ui.internal.Messages;
 
 
 public class MavenPreferencePage extends FieldEditorPreferencePage implements IWorkbenchPreferencePage {
+
+  private static final Logger log = LoggerFactory.getLogger(MavenPreferencePage.class);
 
   public MavenPreferencePage() {
     super(GRID);
@@ -50,29 +55,26 @@ public class MavenPreferencePage extends FieldEditorPreferencePage implements IW
         Messages.preferencesGlobalUpdateNever, getFieldEditorParent()));
 
     addField(new BooleanFieldEditor(MavenPreferenceConstants.P_DEBUG_OUTPUT, //
-        Messages.preferencesDebugOutput,
-        getFieldEditorParent()));
+        Messages.preferencesDebugOutput, getFieldEditorParent()));
 
     // addField( new BooleanFieldEditor( MavenPreferenceConstants.P_UPDATE_SNAPSHOTS, 
     //     Messages.getString( "preferences.updateSnapshots" ), //$NON-NLS-1$
     //     getFieldEditorParent() ) );
 
     addField(new BooleanFieldEditor(MavenPreferenceConstants.P_DOWNLOAD_SOURCES, //
-        Messages.preferencesDownloadSources,
-        getFieldEditorParent()));
+        Messages.preferencesDownloadSources, getFieldEditorParent()));
 
     addField(new BooleanFieldEditor(MavenPreferenceConstants.P_DOWNLOAD_JAVADOC, //
-        Messages.preferencesDownloadJavadoc,
-        getFieldEditorParent()));
+        Messages.preferencesDownloadJavadoc, getFieldEditorParent()));
 
     addField(new BooleanFieldEditor(MavenPreferenceConstants.P_UPDATE_INDEXES, //
         Messages.MavenPreferencePage_download, //
         getFieldEditorParent()));
-    
+
     addField(new BooleanFieldEditor(MavenPreferenceConstants.P_UPDATE_PROJECTS, //
         Messages.MavenPreferencePage_update, //
         getFieldEditorParent()));
-    
+
     addField(new BooleanFieldEditor(MavenPreferenceConstants.P_HIDE_FOLDERS_OF_NESTED_PROJECTS, //
         Messages.MavenPreferencePage_hide, getFieldEditorParent()));
 
@@ -86,18 +88,5 @@ public class MavenPreferencePage extends FieldEditorPreferencePage implements IW
     comboComposite.setLayoutData(comboCompositeGridData);
     comboComposite.setLayout(new GridLayout(2, false));
 
-    // addSeparator();
   }
-
-  private void addSeparator() {
-    Label separator = new Label(getFieldEditorParent(), SWT.HORIZONTAL | SWT.SEPARATOR);
-    // separator.setVisible(false);
-    GridData separatorGridData = new GridData();
-    separatorGridData.horizontalSpan = 4;
-    separatorGridData.grabExcessHorizontalSpace = true;
-    separatorGridData.horizontalAlignment = GridData.FILL;
-    separatorGridData.verticalIndent = 10;
-    separator.setLayoutData(separatorGridData);
-  }
-
 }

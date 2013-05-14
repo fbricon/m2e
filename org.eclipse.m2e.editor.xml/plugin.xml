@@ -5,10 +5,10 @@
   <extension point="org.eclipse.wst.sse.ui.editorConfiguration">
     <sourceViewerConfiguration
         class="org.eclipse.m2e.editor.xml.PomStructuredTextViewConfiguration"
-        target="org.eclipse.m2e.core.pomFile, org.eclipse.wst.xml.core.xmlsource, org.eclipse.core.runtime.xml"/>
+        target="org.eclipse.m2e.core.pomFile"/>
     <contentOutlineConfiguration
         class="org.eclipse.m2e.editor.xml.PomContentOutlineConfiguration"
-        target="org.eclipse.m2e.core.pomFile, org.eclipse.wst.xml.core.xmlsource, org.eclipse.core.runtime.xml"/>
+        target="org.eclipse.m2e.core.pomFile"/>
     <provisionalConfiguration
         type="org.eclipse.jface.text.quickassist.IQuickAssistProcessor"
         class="org.eclipse.m2e.editor.xml.PomQuickAssistProcessor"
@@ -180,7 +180,7 @@
       <pattern>&lt;plugin&gt;
         &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
         &lt;artifactId&gt;maven-compiler-plugin&lt;/artifactId&gt;
-        &lt;version&gt;2.4&lt;/version&gt;
+        &lt;version&gt;3.1&lt;/version&gt;
         &lt;configuration&gt;
           &lt;!-- http://maven.apache.org/plugins/maven-compiler-plugin/ --&gt;
           &lt;source&gt;${cursor}1.6&lt;/source&gt;
@@ -215,10 +215,10 @@
       <pattern>&lt;plugin&gt;
         &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
         &lt;artifactId&gt;maven-war-plugin&lt;/artifactId&gt;
-        &lt;version&gt;2.2&lt;/version&gt;
+        &lt;version&gt;2.3&lt;/version&gt;
         &lt;configuration&gt;
           &lt;!-- web.xml is not mandatory since JavaEE 5 --&gt;
-          &lt;failOnMissingWebXml&gt;true&lt;/failOnMissingWebXml&gt;
+          &lt;failOnMissingWebXml&gt;false&lt;/failOnMissingWebXml&gt;
           &lt;!--
           &lt;filteringDeploymentDescriptors&gt;true&lt;/filteringDeploymentDescriptors&gt;
           &lt;warSourceDirectory&gt;WebContent&lt;/warSourceDirectory&gt;        
@@ -255,10 +255,10 @@
       <pattern>&lt;plugin&gt;
         &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
         &lt;artifactId&gt;maven-ear-plugin&lt;/artifactId&gt;
-        &lt;version&gt;2.7&lt;/version&gt;
+        &lt;version&gt;2.8&lt;/version&gt;
         &lt;configuration&gt;
           &lt;!-- http://maven.apache.org/plugins/maven-ear-plugin/ --&gt;
-          &lt;version&gt;5&lt;/version&gt;
+          &lt;version&gt;6&lt;/version&gt;
           &lt;defaultLibBundleDir&gt;lib&lt;/defaultLibBundleDir&gt;       
           &lt;!-- 
           &lt;generateApplicationXml&gt;false&lt;/generateApplicationXml&gt;
@@ -371,6 +371,24 @@
      &lt;/dependencies&gt;
    &lt;/profile&gt;</pattern>
     </template>
+    
+    <template id="org.eclipse.m2e.editor.xml.templates.profile.m2e"
+         contextTypeId="org.eclipse.m2e.editor.xml.templates.contextType.profiles"
+         name="%template.m2e.profile.name" 
+         description="%template.m2e.profile.description">
+       <pattern>&lt;profile&gt;
+   &lt;id&gt;m2e&lt;/id&gt;
+   &lt;!-- This profile is only activated when building in Eclipse with m2e --&gt;
+   &lt;activation&gt;
+     &lt;property&gt;
+       &lt;name&gt;m2e.version&lt;/name&gt;
+     &lt;/property&gt;
+   &lt;/activation&gt;
+   ${cursor}
+ &lt;/profile&gt;       
+       </pattern>
+    </template>
+    
     
     <template id="org.eclipse.m2e.editor.xml.templates.systemPath.tools.jar"
          contextTypeId="org.eclipse.m2e.editor.xml.templates.contextType.systemPath"

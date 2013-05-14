@@ -8,11 +8,17 @@
  * Contributors:
  *      Sonatype, Inc. - initial API and implementation
  *******************************************************************************/
+
 package org.eclipse.m2e.core.internal.markers;
 
+import org.eclipse.core.resources.IMarker;
+import org.eclipse.core.runtime.CoreException;
 import org.eclipse.osgi.util.NLS;
 
 import org.sonatype.aether.artifact.Artifact;
+
+import org.eclipse.m2e.core.internal.IMavenConstants;
+
 
 public class ArtifactNotFoundProblemInfo extends MavenProblemInfo {
   private final Artifact artifact;
@@ -32,5 +38,20 @@ public class ArtifactNotFoundProblemInfo extends MavenProblemInfo {
 
   public Artifact getArtifact() {
     return this.artifact;
+  }
+
+  /**
+   * Adds the missing artifact groupId, artifactId, version and classifier as marker attributes.
+   * 
+   * @since 1.4.0
+   */
+  public void processMarker(IMarker marker) throws CoreException {
+    super.processMarker(marker);
+    if(artifact != null) {
+      marker.setAttribute(IMavenConstants.MARKER_ATTR_GROUP_ID, artifact.getGroupId());
+      marker.setAttribute(IMavenConstants.MARKER_ATTR_ARTIFACT_ID, artifact.getArtifactId());
+      marker.setAttribute(IMavenConstants.MARKER_ATTR_VERSION, artifact.getVersion());
+      marker.setAttribute(IMavenConstants.MARKER_ATTR_CLASSIFIER, artifact.getClassifier());
+    }
   }
 }

@@ -13,7 +13,6 @@ package org.eclipse.m2e.core.internal.project.registry;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -36,24 +35,28 @@ import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.core.runtime.preferences.IEclipsePreferences.IPreferenceChangeListener;
 import org.eclipse.core.runtime.preferences.IEclipsePreferences.PreferenceChangeEvent;
 
+import org.eclipse.m2e.core.embedder.ICallable;
 import org.eclipse.m2e.core.embedder.IMavenConfiguration;
+import org.eclipse.m2e.core.embedder.IMavenExecutionContext;
 import org.eclipse.m2e.core.internal.Messages;
 import org.eclipse.m2e.core.internal.jobs.IBackgroundProcessingQueue;
 import org.eclipse.m2e.core.project.IMavenProjectFacade;
 import org.eclipse.m2e.core.project.MavenUpdateRequest;
 
-public class ProjectRegistryRefreshJob extends Job implements IResourceChangeListener, IPreferenceChangeListener, IBackgroundProcessingQueue {
+
+public class ProjectRegistryRefreshJob extends Job implements IResourceChangeListener, IPreferenceChangeListener,
+    IBackgroundProcessingQueue {
   private static final Logger log = LoggerFactory.getLogger(ProjectRegistryRefreshJob.class);
 
   private static final long SCHEDULE_DELAY = 1000L;
 
   private static final int DELTA_FLAGS = IResourceDelta.CONTENT | IResourceDelta.MOVED_FROM | IResourceDelta.MOVED_TO
-  | IResourceDelta.COPIED_FROM | IResourceDelta.REPLACED;
-  
-  private final List<MavenUpdateRequest> queue = new ArrayList<MavenUpdateRequest>();
+      | IResourceDelta.COPIED_FROM | IResourceDelta.REPLACED;
 
-  private final ProjectRegistryManager manager;
-  
+  private final Set<MavenUpdateRequest> queue = new LinkedHashSet<MavenUpdateRequest>();
+
+  /*package*/final ProjectRegistryManager manager;
+
   private final IMavenConfiguration mavenConfiguration;
 
   public ProjectRegistryRefreshJob(ProjectRegistryManager manager, IMavenConfiguration mavenConfiguration) {
@@ -68,8 +71,8 @@ public class ProjectRegistryRefreshJob extends Job implements IResourceChangeLis
   }
 
   // Job
-  
-  public IStatus run(IProgressMonitor monitor) {
+
+  public IStatus run(final IProgressMonitor monitor) {
     monitor.beginTask(Messages.ProjectRegistryRefreshJob_task_refreshing, IProgressMonitor.UNKNOWN);
     ArrayList<MavenUpdateRequest> requests;
     synchronized(this.queue) {
@@ -78,15 +81,20 @@ public class ProjectRegistryRefreshJob extends Job implements IResourceChangeLis
     }
 
     try {
-      MutableProjectRegistry newState = manager.newMutableProjectRegistry();
+      final MutableProjectRegistry newState = manager.newMutableProjectRegistry();
       try {
-        for (MavenUpdateRequest request : requests) {
+        for(final MavenUpdateRequest request : requests) {
           if(monitor.isCanceled()) {
             throw new OperationCanceledException();
           }
-          manager.refresh(newState, request, monitor);
+          manager.getMaven().execute(request.isOffline(), request.isForceDependencyUpdate(), new ICallable<Void>() {
+            public Void call(IMavenExecutionContext context, IProgressMonitor monitor) throws CoreException {
+              manager.refresh(newState, request.getPomFiles(), monitor);
+              return null;
+            }
+          }, monitor);
         }
-  
+
         ISchedulingRule rule = ResourcesPlugin.getWorkspace().getRoot();
         getJobManager().beginRule(rule, monitor);
         try {
@@ -101,9 +109,12 @@ public class ProjectRegistryRefreshJob extends Job implements IResourceChangeLis
       log.error(ex.getMessage(), ex);
     } catch(OperationCanceledException ex) {
       log.info("{} was canceled", getClass().getName());
-    } catch (StaleMutableProjectRegistryException e) {
+    } catch(StaleMutableProjectRegistryException e) {
       synchronized(this.queue) {
-        this.queue.addAll(0, requests);
+        // must preserve order of requests here
+        requests.addAll(this.queue);
+        this.queue.clear();
+        this.queue.addAll(requests);
         if(!this.queue.isEmpty()) {
           schedule(SCHEDULE_DELAY);
         }
@@ -118,9 +129,9 @@ public class ProjectRegistryRefreshJob extends Job implements IResourceChangeLis
   }
 
   // IResourceChangeListener
-  
+
   public void resourceChanged(IResourceChangeEvent event) {
-    boolean offline = mavenConfiguration.isOffline();  
+    boolean offline = mavenConfiguration.isOffline();
     boolean forceDependencyUpdate = false;
 
     int type = event.getType();
@@ -130,13 +141,13 @@ public class ProjectRegistryRefreshJob extends Job implements IResourceChangeLis
     } else {
       // if (IResourceChangeEvent.POST_CHANGE == type)
       IWorkspace workspace = ResourcesPlugin.getWorkspace();
-      boolean autobuilding = workspace != null && workspace.isAutoBuilding(); 
+      boolean autobuilding = workspace != null && workspace.isAutoBuilding();
 
       // MavenBuilder will synchronously read/refresh workspace Maven project state.
       // To avoid double-work and/or locking between MavenBuilder and background registry refresh job, we skip project
       // refresh when workspace is autobuilding.
       // We still refresh opened projects because workspace does not run build after project open event.
-      
+
       IResourceDelta delta = event.getDelta(); // workspace delta
       IResourceDelta[] projectDeltas = delta.getAffectedChildren();
       Set<IProject> refreshProjects = new LinkedHashSet<IProject>();
@@ -186,10 +197,10 @@ public class ProjectRegistryRefreshJob extends Job implements IResourceChangeLis
   }
 
   public void preferenceChange(PreferenceChangeEvent event) {
-    boolean offline = mavenConfiguration.isOffline();  
+    boolean offline = mavenConfiguration.isOffline();
     boolean updateSnapshots = false;
 
-    if (event.getSource() instanceof IProject) {
+    if(event.getSource() instanceof IProject) {
       queue(new MavenUpdateRequest((IProject) event.getSource(), offline, updateSnapshots));
     }
   }
@@ -201,8 +212,7 @@ public class ProjectRegistryRefreshJob extends Job implements IResourceChangeLis
   }
 
   protected boolean isInterestingDelta(IResourceDelta delta) {
-    return delta.getKind() == IResourceDelta.REMOVED 
-        || delta.getKind() == IResourceDelta.ADDED
+    return delta.getKind() == IResourceDelta.REMOVED || delta.getKind() == IResourceDelta.ADDED
         || (delta.getKind() == IResourceDelta.CHANGED && ((delta.getFlags() & DELTA_FLAGS) != 0));
   }
 }

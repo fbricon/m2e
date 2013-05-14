@@ -35,20 +35,18 @@ import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.MojoExecution;
 import org.apache.maven.project.MavenProject;
 
-import org.eclipse.m2e.core.MavenPlugin;
 import org.eclipse.m2e.core.embedder.ArtifactKey;
 import org.eclipse.m2e.core.embedder.ArtifactRef;
 import org.eclipse.m2e.core.embedder.ArtifactRepositoryRef;
 import org.eclipse.m2e.core.embedder.IMaven;
-import org.eclipse.m2e.core.embedder.IMavenConfiguration;
 import org.eclipse.m2e.core.internal.IMavenConstants;
 import org.eclipse.m2e.core.internal.Messages;
 import org.eclipse.m2e.core.lifecyclemapping.model.IPluginExecutionMetadata;
 import org.eclipse.m2e.core.project.IMavenProjectFacade;
 import org.eclipse.m2e.core.project.MavenProjectUtils;
-import org.eclipse.m2e.core.project.MavenUpdateRequest;
 import org.eclipse.m2e.core.project.ResolverConfiguration;
 import org.eclipse.m2e.core.project.configurator.MojoExecutionKey;
+
 
 public class MavenProjectFacade implements IMavenProjectFacade, Serializable {
 
@@ -81,20 +79,32 @@ public class MavenProjectFacade implements IMavenProjectFacade, Serializable {
 
   // cached values from mavenProject
   private final ArtifactKey artifactKey;
+
   private final List<String> modules;
+
   private final String packaging;
+
   private final IPath[] resourceLocations;
+
   private final IPath[] testResourceLocations;
+
   private final IPath[] compileSourceLocations;
+
   private final IPath[] testCompileSourceLocations;
+
   private final IPath outputLocation;
+
   private final IPath testOutputLocation;
+
   private final Set<ArtifactRepositoryRef> artifactRepositories;
+
   private final Set<ArtifactRepositoryRef> pluginArtifactRepositories;
+
   private Set<ArtifactRef> artifacts; // dependencies are resolved after facade instance is created 
-  
+
   // lifecycle mapping
   private String lifecycleMappingId;
+
   private Map<MojoExecutionKey, List<IPluginExecutionMetadata>> mojoExecutionMapping;
 
   public MavenProjectFacade(ProjectRegistryManager manager, IFile pom, MavenProject mavenProject,
@@ -114,8 +124,10 @@ public class MavenProjectFacade implements IMavenProjectFacade, Serializable {
 
     this.resourceLocations = MavenProjectUtils.getResourceLocations(getProject(), mavenProject.getResources());
     this.testResourceLocations = MavenProjectUtils.getResourceLocations(getProject(), mavenProject.getTestResources());
-    this.compileSourceLocations = MavenProjectUtils.getSourceLocations(getProject(), mavenProject.getCompileSourceRoots());
-    this.testCompileSourceLocations = MavenProjectUtils.getSourceLocations(getProject(),mavenProject.getTestCompileSourceRoots());
+    this.compileSourceLocations = MavenProjectUtils.getSourceLocations(getProject(),
+        mavenProject.getCompileSourceRoots());
+    this.testCompileSourceLocations = MavenProjectUtils.getSourceLocations(getProject(),
+        mavenProject.getTestCompileSourceRoots());
 
     IPath fullPath = getProject().getFullPath();
 
@@ -203,18 +215,13 @@ public class MavenProjectFacade implements IMavenProjectFacade, Serializable {
    * Lazy load and cache MavenProject instance
    */
   public synchronized MavenProject getMavenProject(IProgressMonitor monitor) throws CoreException {
-    if (mavenProject == null) {
-      //this used to just pass in 'true' for 'offline'. when the local repo was removed or
-      //corrupted, though, the project wouldn't load correctly
-      IMavenConfiguration mavenConfiguration = MavenPlugin.getMavenConfiguration();
-      boolean isOffline = mavenConfiguration.isOffline();
-      MavenExecutionResult result = manager.readProjectWithDependencies(pom, resolverConfiguration, //
-          new MavenUpdateRequest(isOffline, false /* updateSnapshots */), monitor);
+    if(mavenProject == null) {
+      MavenExecutionResult result = manager.readProjectWithDependencies(pom, resolverConfiguration, monitor);
       mavenProject = result.getProject();
-      if (mavenProject == null) {
+      if(mavenProject == null) {
         MultiStatus status = new MultiStatus(IMavenConstants.PLUGIN_ID, 0, Messages.MavenProjectFacade_error, null);
         List<Throwable> exceptions = result.getExceptions();
-        for (Throwable e : exceptions) {
+        for(Throwable e : exceptions) {
           status.add(new Status(IStatus.ERROR, IMavenConstants.PLUGIN_ID, 0, e.getMessage(), e));
         }
         throw new CoreException(status);
@@ -250,7 +257,7 @@ public class MavenProjectFacade implements IMavenProjectFacade, Serializable {
   public List<String> getMavenProjectModules() {
     return modules;
   }
-  
+
   public Set<ArtifactRef> getMavenProjectArtifacts() {
     return artifacts;
   }
@@ -264,16 +271,16 @@ public class MavenProjectFacade implements IMavenProjectFacade, Serializable {
   }
 
   /**
-   * @return true if maven project needs to be re-read from disk  
+   * @return true if maven project needs to be re-read from disk
    */
   public boolean isStale() {
     IProject project = getProject();
     int i = 0;
     for(IPath path : ProjectRegistryManager.METADATA_PATH) {
-      if (timestamp[i] != getModificationStamp(project.getFile(path))) {
+      if(timestamp[i] != getModificationStamp(project.getFile(path))) {
         return true;
       }
-      i++;
+      i++ ;
     }
     return false;
   }
@@ -282,8 +289,8 @@ public class MavenProjectFacade implements IMavenProjectFacade, Serializable {
     IProject project = getProject();
     int i = 0;
     for(IPath path : ProjectRegistryManager.METADATA_PATH) {
-      timestamp[i] = getModificationStamp(project.getFile(path)); 
-      i++;
+      timestamp[i] = getModificationStamp(project.getFile(path));
+      i++ ;
     }
     timestamp[timestamp.length - 1] = getModificationStamp(pom);
   }
@@ -309,10 +316,10 @@ public class MavenProjectFacade implements IMavenProjectFacade, Serializable {
   }
 
   public synchronized void setSessionProperty(String key, Object value) {
-    if (sessionProperties == null) {
+    if(sessionProperties == null) {
       sessionProperties = new HashMap<String, Object>();
     }
-    if (value != null) {
+    if(value != null) {
       sessionProperties.put(key, value);
     } else {
       sessionProperties.remove(key);
@@ -320,7 +327,7 @@ public class MavenProjectFacade implements IMavenProjectFacade, Serializable {
   }
 
   public synchronized Object getSessionProperty(String key) {
-    return sessionProperties != null? sessionProperties.get(key): null;
+    return sessionProperties != null ? sessionProperties.get(key) : null;
   }
 
   public Set<ArtifactRepositoryRef> getArtifactRepositoryRefs() {
@@ -370,8 +377,8 @@ public class MavenProjectFacade implements IMavenProjectFacade, Serializable {
     }
   }
 
-  public synchronized List<MojoExecution> getMojoExecutions(String groupId, String artifactId, IProgressMonitor monitor,
-      String... goals) throws CoreException {
+  public synchronized List<MojoExecution> getMojoExecutions(String groupId, String artifactId,
+      IProgressMonitor monitor, String... goals) throws CoreException {
     List<MojoExecution> result = new ArrayList<MojoExecution>();
     List<MojoExecution> _executions = getMojoExecutions(monitor);
     if(_executions != null) {
@@ -440,7 +447,7 @@ public class MavenProjectFacade implements IMavenProjectFacade, Serializable {
     }
     return mojoExecutions;
   }
-  
+
   public List<MojoExecution> getExecutionPlan(String lifecycle, IProgressMonitor monitor) throws CoreException {
     Map<String, List<MojoExecution>> executionPlans = getExecutionPlans(monitor);
     return executionPlans != null ? executionPlans.get(lifecycle) : null;

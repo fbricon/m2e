@@ -9,7 +9,6 @@
  *      Sonatype, Inc. - initial API and implementation
  *******************************************************************************/
 
-
 package org.eclipse.m2e.editor.xml.internal.lifecycle;
 
 import static org.eclipse.m2e.core.ui.internal.editing.PomEdits.performOnDOMDocument;
@@ -25,7 +24,6 @@ import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
-import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.text.contentassist.ICompletionProposal;
 import org.eclipse.jface.text.contentassist.ICompletionProposalExtension5;
@@ -33,42 +31,36 @@ import org.eclipse.jface.text.contentassist.IContextInformation;
 import org.eclipse.jface.text.quickassist.IQuickAssistInvocationContext;
 import org.eclipse.jface.window.Window;
 import org.eclipse.osgi.util.NLS;
-import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.Display;
-import org.eclipse.ui.IMarkerResolution;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.texteditor.MarkerAnnotation;
-import org.eclipse.ui.views.markers.WorkbenchMarkerResolution;
 
 import org.eclipse.m2e.core.internal.IMavenConstants;
 import org.eclipse.m2e.core.lifecyclemapping.model.PluginExecutionAction;
 import org.eclipse.m2e.core.ui.internal.editing.LifecycleMappingOperation;
 import org.eclipse.m2e.core.ui.internal.editing.PomEdits.CompoundOperation;
-import org.eclipse.m2e.core.ui.internal.editing.PomEdits.OperationTuple;
 import org.eclipse.m2e.core.ui.internal.editing.PomEdits.Operation;
+import org.eclipse.m2e.core.ui.internal.editing.PomEdits.OperationTuple;
 import org.eclipse.m2e.editor.xml.internal.Messages;
 
-public class LifecycleMappingProposal extends WorkbenchMarkerResolution implements ICompletionProposal, ICompletionProposalExtension5 {
+
+public class LifecycleMappingProposal extends AbstractLifecycleMappingProposal implements ICompletionProposal,
+    ICompletionProposalExtension5 {
   private static final Logger log = LoggerFactory.getLogger(LifecycleMappingProposal.class);
 
   private IQuickAssistInvocationContext context;
-  private final IMarker marker;
 
-  private final PluginExecutionAction action;
-  
   public LifecycleMappingProposal(IQuickAssistInvocationContext context, MarkerAnnotation mark,
       PluginExecutionAction action) {
+    super(mark.getMarker(), action);
     this.context = context;
-    marker = mark.getMarker();
-    this.action = action;
   }
-  
+
   public LifecycleMappingProposal(IMarker marker, PluginExecutionAction action) {
-    this.marker = marker;
-    this.action = action;
+    super(marker, action);
   }
-  
+
   public void apply(final IDocument doc) {
     try {
       if(PluginExecutionAction.ignore.equals(action)) {
@@ -100,7 +92,7 @@ public class LifecycleMappingProposal extends WorkbenchMarkerResolution implemen
     });
     if(pomFile[0] != null) {
       List<LifecycleMappingOperation> lst = new ArrayList<LifecycleMappingOperation>();
-      for (IMarker m : marks) {
+      for(IMarker m : marks) {
         lst.add(createOperation(m));
       }
       performOnDOMDocument(new OperationTuple(pomFile[0], new CompoundOperation(lst.toArray(new Operation[0]))));
@@ -111,10 +103,9 @@ public class LifecycleMappingProposal extends WorkbenchMarkerResolution implemen
     String pluginGroupId = mark.getAttribute(IMavenConstants.MARKER_ATTR_GROUP_ID, ""); //$NON-NLS-1$
     String pluginArtifactId = mark.getAttribute(IMavenConstants.MARKER_ATTR_ARTIFACT_ID, ""); //$NON-NLS-1$
     String pluginVersion = mark.getAttribute(IMavenConstants.MARKER_ATTR_VERSION, ""); //$NON-NLS-1$
-    String[] goals = new String[] { mark.getAttribute(IMavenConstants.MARKER_ATTR_GOAL, "")}; //$NON-NLS-1$
+    String[] goals = new String[] {mark.getAttribute(IMavenConstants.MARKER_ATTR_GOAL, "")}; //$NON-NLS-1$
     return new LifecycleMappingOperation(pluginGroupId, pluginArtifactId, pluginVersion, action, goals);
   }
-
 
   public String getAdditionalProposalInfo() {
     return null;
@@ -130,18 +121,12 @@ public class LifecycleMappingProposal extends WorkbenchMarkerResolution implemen
         : NLS.bind(Messages.LifecycleMappingProposal_execute_label, goal);
   }
 
-  public Image getImage() {
-    return PluginExecutionAction.ignore.equals(action) ? PlatformUI.getWorkbench().getSharedImages()
-        .getImage(org.eclipse.ui.ISharedImages.IMG_TOOL_DELETE) : PlatformUI.getWorkbench().getSharedImages()
-        .getImage(org.eclipse.ui.ISharedImages.IMG_TOOL_FORWARD);
-  }
-
-  public Point getSelection(IDocument arg0) {
+  public Point getSelection(IDocument document) {
     return null;
   }
 
   public Object getAdditionalProposalInfo(IProgressMonitor monitor) {
-    if (context == null) {
+    if(context == null) {
       //no context in markerresolution, just to be sure..
       return null;
     }
@@ -151,46 +136,15 @@ public class LifecycleMappingProposal extends WorkbenchMarkerResolution implemen
     String goal = marker.getAttribute(IMavenConstants.MARKER_ATTR_GOAL, ""); //$NON-NLS-1$
     String execution = marker.getAttribute(IMavenConstants.MARKER_ATTR_EXECUTION_ID, "-"); //$NON-NLS-1$
     String phase = marker.getAttribute(IMavenConstants.MARKER_ATTR_LIFECYCLE_PHASE, "-"); //$NON-NLS-1$
-    String info = NLS.bind(Messages.LifecycleMappingProposal_all_desc, 
-        new Object[] {goal, execution, phase, pluginGroupId + ":" + pluginArtifactId + ":" + pluginVersion,  //$NON-NLS-1$ //$NON-NLS-2$
-        (PluginExecutionAction.ignore.equals(action)
-            ? Messages.LifecycleMappingProposal_ignore_desc 
+    String info = NLS.bind(Messages.LifecycleMappingProposal_all_desc, new Object[] {
+        goal,
+        execution,
+        phase,
+        pluginGroupId + ":" + pluginArtifactId + ":" + pluginVersion, //$NON-NLS-1$ //$NON-NLS-2$
+        (PluginExecutionAction.ignore.equals(action) ? Messages.LifecycleMappingProposal_ignore_desc
             : Messages.LifecycleMappingProposal_execute_desc)});
-    
+
     return info;
-  }
-
-  public String getLabel() {
-    return getDisplayString();
-  }
-
-  public void run(final IMarker marker) {
-    run(new IMarker[] {marker}, new NullProgressMonitor());
-  }
-
-  public String getDescription() {
-    // TODO Auto-generated method stub
-    return getDisplayString();
-  }
-
-  @Override
-  public IMarker[] findOtherMarkers(IMarker[] markers) {
-    List<IMarker> toRet = new ArrayList<IMarker>();
-    
-    for (IMarker mark : markers) {
-        if (mark == this.marker) {
-          continue;
-        }
-        try {
-          if (mark.getType().equals(this.marker.getType()) && mark.getResource().equals(this.marker.getResource())) {
-            toRet.add(mark);
-          }
-        } catch(CoreException e) {
-          log.error(e.getMessage(), e);
-        }
-    }
-    return toRet.toArray(new IMarker[0]);
-    
   }
 
   @Override
@@ -200,10 +154,11 @@ public class LifecycleMappingProposal extends WorkbenchMarkerResolution implemen
         performIgnore(markers);
       } else {
         List<LifecycleMappingOperation> lst = new ArrayList<LifecycleMappingOperation>();
-        for (IMarker m : markers) {
+        for(IMarker m : markers) {
           lst.add(createOperation(m));
         }
-        performOnDOMDocument(new OperationTuple((IFile) marker.getResource(), new CompoundOperation(lst.toArray(new Operation[0]))));
+        performOnDOMDocument(new OperationTuple((IFile) marker.getResource(), new CompoundOperation(
+            lst.toArray(new Operation[0]))));
       }
     } catch(IOException e) {
       log.error("Error generating code in pom.xml", e); //$NON-NLS-1$
@@ -211,6 +166,5 @@ public class LifecycleMappingProposal extends WorkbenchMarkerResolution implemen
       log.error(e.getMessage(), e);
     }
   }
-  
-  
+
 }

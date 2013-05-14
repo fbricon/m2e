@@ -18,7 +18,10 @@
       </annotation>
       <complexType>
          <sequence minOccurs="1" maxOccurs="unbounded">
-            <element ref="projectConversionParticipant"/>
+            <choice>
+               <element ref="projectConversionParticipant"/>
+               <element ref="conversionParticipantConfiguration"/>
+            </choice>
          </sequence>
          <attribute name="point" type="string" use="required">
             <annotation>
@@ -80,6 +83,39 @@
             <annotation>
                <documentation>
                   Project nature the converter applies to.
+               </documentation>
+            </annotation>
+         </attribute>
+         <attribute name="runsAfter" type="string">
+            <annotation>
+               <documentation>
+                  Optional comma-separated list of projectConversionParticipant ids this participant should run after.
+               </documentation>
+            </annotation>
+         </attribute>
+         <attribute name="runsBefore" type="string">
+            <annotation>
+               <documentation>
+                  Optional comma-separated list of projectConversionParticipant ids this participant should run before.
+               </documentation>
+            </annotation>
+         </attribute>
+      </complexType>
+   </element>
+
+   <element name="conversionParticipantConfiguration">
+      <complexType>
+         <attribute name="conversionParticipantId" type="string" use="required">
+            <annotation>
+               <documentation>
+                  project conversion participant id this configuration applies to
+               </documentation>
+            </annotation>
+         </attribute>
+         <attribute name="compatiblePackagings" type="string">
+            <annotation>
+               <documentation>
+                  Optional comma-separated list of Maven packagings that should be added to the project conversion participant&apos;s restricted packagings.
                </documentation>
             </annotation>
          </attribute>

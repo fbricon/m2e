@@ -96,15 +96,15 @@ import org.eclipse.m2e.core.internal.index.IndexManager;
 import org.eclipse.m2e.core.internal.index.IndexedArtifact;
 import org.eclipse.m2e.core.internal.index.IndexedArtifactFile;
 import org.eclipse.m2e.core.internal.index.MatchTyped;
+import org.eclipse.m2e.core.internal.index.MatchTyped.MatchType;
 import org.eclipse.m2e.core.internal.index.SearchExpression;
 import org.eclipse.m2e.core.internal.index.SourcedSearchExpression;
-import org.eclipse.m2e.core.internal.index.MatchTyped.MatchType;
 import org.eclipse.m2e.core.internal.index.nexus.IndexUpdaterJob.IndexCommand;
 import org.eclipse.m2e.core.internal.repository.IRepositoryIndexer;
 import org.eclipse.m2e.core.project.IMavenProjectChangedListener;
 import org.eclipse.m2e.core.project.IMavenProjectFacade;
-import org.eclipse.m2e.core.project.MavenProjectChangedEvent;
 import org.eclipse.m2e.core.project.IMavenProjectRegistry;
+import org.eclipse.m2e.core.project.MavenProjectChangedEvent;
 import org.eclipse.m2e.core.repository.IRepository;
 import org.eclipse.m2e.core.repository.IRepositoryRegistry;
 
@@ -172,8 +172,7 @@ public class NexusIndexManager implements IndexManager, IMavenProjectChangedList
    */
   private final Map<String, Object> indexLocks = new WeakHashMap<String, Object>();
 
-  public NexusIndexManager(IMavenProjectRegistry projectManager,
-      IRepositoryRegistry repositoryRegistry, File stateDir) {
+  public NexusIndexManager(IMavenProjectRegistry projectManager, IRepositoryRegistry repositoryRegistry, File stateDir) {
     this.projectManager = projectManager;
     this.repositoryRegistry = repositoryRegistry;
     this.baseIndexDir = new File(stateDir, "nexus"); //$NON-NLS-1$
@@ -298,6 +297,9 @@ public class NexusIndexManager implements IndexManager, IMavenProjectChangedList
   protected IndexedArtifactFile identify(IRepository repository, File file) throws CoreException {
     try {
       IndexingContext context = getIndexingContext(repository);
+      if(context == null) {
+        return null;
+      }
       ArtifactInfo artifactInfo = identify(file, Collections.singleton(context));
       return artifactInfo == null ? null : getIndexedArtifactFile(artifactInfo);
     } catch(IOException ex) {
@@ -811,16 +813,16 @@ public class NexusIndexManager implements IndexManager, IMavenProjectChangedList
     indexes.add(getWorkspaceIndex());
     indexes.add(getLocalIndex());
 
+    LinkedHashSet<ArtifactRepositoryRef> repositories = new LinkedHashSet<ArtifactRepositoryRef>();
     for(IMavenProjectFacade facade : projectManager.getProjects()) {
-      LinkedHashSet<ArtifactRepositoryRef> repositories = new LinkedHashSet<ArtifactRepositoryRef>();
       repositories.addAll(facade.getArtifactRepositoryRefs());
       repositories.addAll(facade.getPluginArtifactRepositoryRefs());
+    }
 
-      for(ArtifactRepositoryRef repositoryRef : repositories) {
-        IRepository repository = repositoryRegistry.getRepository(repositoryRef);
-        if(repository != null) {
-          indexes.add(getIndex(repository));
-        }
+    for(ArtifactRepositoryRef repositoryRef : repositories) {
+      IRepository repository = repositoryRegistry.getRepository(repositoryRef);
+      if(repository != null) {
+        indexes.add(getIndex(repository));
       }
     }
 

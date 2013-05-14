@@ -16,8 +16,9 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,7 +79,7 @@ public class UpdateMavenProjectsDialog extends TitleAreaDialog implements IMenuL
 
   private Button forceUpdateBtn;
 
-  private List<String> projectPaths;
+  private Map<String, IProject> projectPaths;
 
   private final IProject[] initialSelection;
 
@@ -100,6 +101,11 @@ public class UpdateMavenProjectsDialog extends TitleAreaDialog implements IMenuL
    * Perform full/clean build after project update
    */
   private boolean cleanProjects;
+
+  /**
+   * Perform refresh from local before doing anything else.
+   */
+  private boolean refreshFromLocal;
 
   protected String dialogTitle;
 
@@ -176,7 +182,7 @@ public class UpdateMavenProjectsDialog extends TitleAreaDialog implements IMenuL
           String elePath = getElePath(parentElement);
           String prevPath = null;
           List<IProject> children = new ArrayList<IProject>();
-          for(String path : projectPaths) {
+          for(String path : projectPaths.keySet()) {
             if(path.length() != elePath.length() && path.startsWith(elePath)) {
               if(prevPath == null || !path.startsWith(prevPath)) {
                 prevPath = path;
@@ -194,7 +200,7 @@ public class UpdateMavenProjectsDialog extends TitleAreaDialog implements IMenuL
       public Object getParent(Object element) {
         String elePath = getElePath(element);
         String prevPath = null;
-        for(String path : projectPaths) {
+        for(String path : projectPaths.keySet()) {
           if(elePath.length() != path.length() && elePath.startsWith(path)
               && (prevPath == null || prevPath.length() < path.length())) {
             prevPath = path;
@@ -206,7 +212,7 @@ public class UpdateMavenProjectsDialog extends TitleAreaDialog implements IMenuL
       public boolean hasChildren(Object element) {
         if(element instanceof IProject) {
           String elePath = getElePath(element);
-          for(String path : projectPaths) {
+          for(String path : projectPaths.keySet()) {
             if(elePath.length() != path.length() && path.startsWith(elePath)) {
               return true;
             }
@@ -332,6 +338,10 @@ public class UpdateMavenProjectsDialog extends TitleAreaDialog implements IMenuL
     btnUpdateProjectConfiguration.setSelection(true);
     btnUpdateProjectConfiguration.setText(Messages.UpdateMavenProjectDialog_btnUpdateProjectConfiguration_text);
 
+    btnRefreshFromLocal = new Button(optionsComposite, SWT.CHECK);
+    btnRefreshFromLocal.setSelection(true);
+    btnRefreshFromLocal.setText(Messages.UpdateMavenProjectsDialog_btnRefreshFromLocal_text);
+
     btnCleanProjects = new Button(optionsComposite, SWT.CHECK);
     btnCleanProjects.setSelection(true);
     btnCleanProjects.setText(Messages.UpdateMavenProjectDialog_btnCleanProjects_text);
@@ -365,35 +375,41 @@ public class UpdateMavenProjectsDialog extends TitleAreaDialog implements IMenuL
     forceUpdateDependencies = forceUpdateBtn.getSelection();
     updateConfiguration = btnUpdateProjectConfiguration.getSelection();
     cleanProjects = btnCleanProjects.getSelection();
+    refreshFromLocal = btnRefreshFromLocal.getSelection();
     super.okPressed();
   }
 
   private Collection<IProject> getMavenCodebases() {
-    projectPaths = new LinkedList<String>();
+    projectPaths = new TreeMap<String, IProject>();
 
     for(IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
       try {
         if(project.isAccessible() && project.hasNature(IMavenConstants.NATURE_ID)) {
           if(project.getLocationURI() != null) {
-            projectPaths.add(getElePath(project));
+            String path = getElePath(project);
+            if(path != null) {
+              projectPaths.put(path, project);
+            }
           }
         }
       } catch(CoreException ex) {
         log.error(ex.getMessage(), ex);
       }
     }
-    Collections.sort(projectPaths);
 
     if(projectPaths.isEmpty()) {
       return Collections.<IProject> emptyList();
     }
     projects = new ArrayList<IProject>();
-    String previous = projectPaths.get(0);
+    String previous = projectPaths.keySet().iterator().next();
     addProject(projects, previous);
-    for(String path : projectPaths) {
+    for(String path : projectPaths.keySet()) {
       if(!path.startsWith(previous)) {
         previous = path;
-        projects.add(getProject(path));
+        IProject project = getProject(path);
+        if(project != null) {
+          projects.add(project);
+        }
       }
     }
     return projects;
@@ -429,15 +445,12 @@ public class UpdateMavenProjectsDialog extends TitleAreaDialog implements IMenuL
     return cleanProjects;
   }
 
+  public boolean isRefreshFromLocal() {
+    return refreshFromLocal;
+  }
+
   private IProject getProject(String path) {
-    IContainer[] containers = ResourcesPlugin.getWorkspace().getRoot()
-        .findContainersForLocationURI(new File(path).toURI());
-    for(IContainer container : containers) {
-      if(container instanceof IProject) {
-        return (IProject) container;
-      }
-    }
-    return null;
+    return projectPaths.get(path);
   }
 
   private void createMenu() {
@@ -485,6 +498,8 @@ public class UpdateMavenProjectsDialog extends TitleAreaDialog implements IMenuL
   private Button btnUpdateProjectConfiguration;
 
   private Button btnCleanProjects;
+
+  private Button btnRefreshFromLocal;
 
   /**
    * @return Returns the dialogTitle or an empty String if the value is null.

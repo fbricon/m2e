@@ -28,14 +28,13 @@ import org.eclipse.core.runtime.CoreException;
 import org.codehaus.plexus.util.IOUtil;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 
-import org.apache.maven.execution.MavenExecutionRequest;
-import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.MojoExecution;
 import org.apache.maven.project.MavenProject;
 
 import org.eclipse.m2e.core.MavenPlugin;
 import org.eclipse.m2e.core.internal.MavenPluginActivator;
 import org.eclipse.m2e.core.internal.lifecyclemapping.LifecycleMappingFactory;
+import org.eclipse.m2e.core.internal.lifecyclemapping.LifecycleMappingResult;
 import org.eclipse.m2e.core.internal.lifecyclemapping.model.LifecycleMappingMetadataSource;
 import org.eclipse.m2e.core.internal.project.registry.MavenProjectFacade;
 import org.eclipse.m2e.core.internal.project.registry.ProjectRegistryManager;
@@ -77,9 +76,8 @@ public abstract class AbstractLifecycleMappingTest extends AbstractMavenProjectT
     return mavenProjectManager.create(project[0], monitor);
   }
 
-  protected LifecycleMappingMetadataSource loadLifecycleMappingMetadataSource(String metadataFilename)
+  private LifecycleMappingMetadataSource loadLifecycleMappingMetadataSourceInternal(File metadataFile)
       throws IOException, XmlPullParserException {
-    File metadataFile = new File(metadataFilename);
     assertTrue("File does not exist:" + metadataFile.getAbsolutePath(), metadataFile.exists());
     InputStream in = new FileInputStream(metadataFile);
     try {
@@ -91,21 +89,24 @@ public abstract class AbstractLifecycleMappingTest extends AbstractMavenProjectT
     }
   }
 
+  protected LifecycleMappingMetadataSource loadLifecycleMappingMetadataSource(String metadataFilename)
+      throws IOException, XmlPullParserException {
+    return loadLifecycleMappingMetadataSourceInternal(new File(metadataFilename));
+  }
+
   /**
    * Creates new partially initialised MavenProjectFacade instance
    */
   protected MavenProjectFacade newMavenProjectFacade(IFile pom) throws CoreException {
     MavenProject mavenProject = MavenPlugin.getMaven().readProject(pom.getLocation().toFile(), monitor);
-    MavenExecutionRequest request = MavenPlugin.getMaven().createExecutionRequest(monitor);
-    MavenSession session = MavenPlugin.getMaven().createSession(request, mavenProject);
     Map<String, List<MojoExecution>> executionPlans = new LinkedHashMap<String, List<MojoExecution>>();
     executionPlans.put(ProjectRegistryManager.LIFECYCLE_CLEAN, new ArrayList<MojoExecution>());
     executionPlans.put(
         ProjectRegistryManager.LIFECYCLE_DEFAULT,
         MavenPlugin
             .getMaven()
-            .calculateExecutionPlan(session, mavenProject, Arrays.asList(ProjectRegistryManager.LIFECYCLE_DEFAULT),
-                false, monitor).getMojoExecutions());
+            .calculateExecutionPlan(mavenProject, Arrays.asList(ProjectRegistryManager.LIFECYCLE_DEFAULT), false,
+                monitor).getMojoExecutions());
     executionPlans.put(ProjectRegistryManager.LIFECYCLE_SITE, new ArrayList<MojoExecution>());
     MavenProjectFacade facade = new MavenProjectFacade(MavenPluginActivator.getDefault().getMavenProjectManagerImpl(),
         pom, mavenProject, executionPlans, new ResolverConfiguration());
@@ -119,13 +120,23 @@ public abstract class AbstractLifecycleMappingTest extends AbstractMavenProjectT
 
     for(Map.Entry<MojoExecutionKey, List<IPluginExecutionMetadata>> entry : executionMapping.entrySet()) {
       if(entry.getValue() == null || entry.getValue().isEmpty()) {
-        if (LifecycleMappingFactory.isInterestingPhase(entry.getKey().getLifecyclePhase())) {
+        if(LifecycleMappingFactory.isInterestingPhase(entry.getKey().getLifecyclePhase())) {
           result.add(entry.getKey());
         }
       }
     }
 
     return result;
+  }
+
+  /**
+   * @since 1.4
+   */
+  protected LifecycleMappingResult calculateLifecycleMapping(MavenProjectFacade facade) throws CoreException {
+    MavenProject mavenProject = facade.getMavenProject(monitor);
+    List<MojoExecution> mojoExecutions = facade.getMojoExecutions(monitor);
+    String lifecycleMappingId = facade.getResolverConfiguration().getLifecycleMappingId();
+    return LifecycleMappingFactory.calculateLifecycleMapping(mavenProject, mojoExecutions, lifecycleMappingId, monitor);
   }
 
 }

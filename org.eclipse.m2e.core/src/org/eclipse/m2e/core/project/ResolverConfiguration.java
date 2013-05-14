@@ -13,15 +13,13 @@ package org.eclipse.m2e.core.project;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
+
 /**
- * Resolver configuration holder.
+ * Resolver configuration holder. TODO need a better name, this configures all aspects of maven project in eclipse, not
+ * just dependency resolution.
  * 
- * TODO need a better name, this configures all aspects of maven project in eclipse, 
- *      not just dependency resolution.
- *
  * @author Eugene Kuleshov
  */
 public class ResolverConfiguration implements Serializable {
@@ -31,12 +29,13 @@ public class ResolverConfiguration implements Serializable {
 
   private String selectedProfiles = ""; //$NON-NLS-1$
 
+  private String lifecycleMappingId;
+
   public boolean shouldResolveWorkspaceProjects() {
     return this.resolveWorkspaceProjects;
   }
 
-  
-  /** 
+  /**
    * @deprecated use {@link #getSelectedProfiles()} instead.
    */
   @Deprecated
@@ -59,7 +58,7 @@ public class ResolverConfiguration implements Serializable {
   public void setResolveWorkspaceProjects(boolean resolveWorkspaceProjects) {
     this.resolveWorkspaceProjects = resolveWorkspaceProjects;
   }
-  
+
   /**
    * @deprecated use {@link #setSelectedProfiles(String)} instead.
    */
@@ -73,21 +72,38 @@ public class ResolverConfiguration implements Serializable {
   }
 
   private static List<String> parseProfiles(String profilesAsText, boolean status) {
-    List<String> profiles; 
-    if (profilesAsText != null && profilesAsText.trim().length() > 0) {
-      String[] profilesArray = profilesAsText.split("[,\\s\\|]"); 
+    List<String> profiles;
+    if(profilesAsText != null && profilesAsText.trim().length() > 0) {
+      String[] profilesArray = profilesAsText.split("[,\\s\\|]");
       profiles = new ArrayList<String>(profilesArray.length);
-      for (String profile : profilesArray) {
-       boolean isActive = !profile.startsWith("!");
-       if (status == isActive) {
-         profile = (isActive)? profile : profile.substring(1);
-         profiles.add(profile);
-       }
+      for(String profile : profilesArray) {
+        boolean isActive = !profile.startsWith("!");
+        if(status == isActive) {
+          profile = (isActive) ? profile : profile.substring(1);
+          profiles.add(profile);
+        }
       }
     } else {
       profiles = new ArrayList<String>(0);
     }
     return profiles;
+  }
+
+  /**
+   * @since 1.3
+   */
+  public String getLifecycleMappingId() {
+    return lifecycleMappingId;
+  }
+
+  /**
+   * Explicitly set project lifecycle mapping id. Non-null value takes precedence over id derived from lifecycle mapping
+   * metadata source, including project pom.xml and workspace preferences.
+   * 
+   * @since 1.3
+   */
+  public void setLifecycleMappingId(String lifecycleMappingId) {
+    this.lifecycleMappingId = lifecycleMappingId;
   }
 
 }

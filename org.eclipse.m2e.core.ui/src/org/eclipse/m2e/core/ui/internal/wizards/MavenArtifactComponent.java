@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008-2010 Sonatype, Inc.
+ * Copyright (c) 2008-2013 Sonatype, Inc.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -11,8 +11,6 @@
 
 package org.eclipse.m2e.core.ui.internal.wizards;
 
-import org.apache.maven.model.Model;
-import org.eclipse.m2e.core.ui.internal.Messages;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.layout.GridData;
@@ -22,6 +20,10 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
+
+import org.apache.maven.model.Model;
+
+import org.eclipse.m2e.core.ui.internal.Messages;
 
 
 public class MavenArtifactComponent extends Composite {
@@ -39,7 +41,7 @@ public class MavenArtifactComponent extends Composite {
   // MNGECLIPSE-688 add EJB Support
   public static final String EJB = "ejb"; //$NON-NLS-1$
 
-  public static final String[] PACKAGING_OPTIONS = {JAR, POM, WAR };
+  public static final String[] PACKAGING_OPTIONS = {JAR, POM, WAR};
 
   public static final String DEFAULT_PACKAGING = JAR;
 
@@ -162,18 +164,16 @@ public class MavenArtifactComponent extends Composite {
       packagingCombo.removeModifyListener(modifyingListener);
     }
   }
-  
+
   /* (non-Javadoc)
    * @see org.eclipse.swt.widgets.Composite#setFocus()
    */
   public boolean setFocus() {
-    if (groupIdCombo != null) {
+    if(groupIdCombo != null) {
       return groupIdCombo.setFocus();
     }
     return super.setFocus();
   }
-
-  
 
   public String getModelName() {
     return nameCombo.getText();
@@ -215,6 +215,12 @@ public class MavenArtifactComponent extends Composite {
     versionCombo.setText(version);
   }
 
+  public void setPackagingTypes(String[] packagingTypes) {
+    if(packagingCombo != null) {
+      packagingCombo.setItems(packagingTypes);
+    }
+  }
+
   public void setPackaging(String packaging) {
     if(packagingCombo != null) {
       packagingCombo.setText(packaging);
@@ -230,19 +236,19 @@ public class MavenArtifactComponent extends Composite {
   public Model getModel() {
     Model model = new Model();
     model.setModelVersion("4.0.0"); //$NON-NLS-1$
-    
+
     model.setGroupId(getGroupId());
     model.setArtifactId(getArtifactId());
     model.setVersion(getVersion());
     model.setPackaging(getPackaging());
-    
-    if(getModelName().length()>0) {
+
+    if(getModelName().length() > 0) {
       model.setName(getModelName());
     }
-    if(getDescription().length()>0) {
+    if(getDescription().length() > 0) {
       model.setDescription(getDescription());
     }
-    
+
     return model;
   }
 
@@ -266,7 +272,7 @@ public class MavenArtifactComponent extends Composite {
   public Combo getNameCombo() {
     return nameCombo;
   }
-  
+
   public void setWidthGroup(WidthGroup widthGroup) {
     widthGroup.addControl(this.groupIdlabel);
     widthGroup.addControl(this.artifactIdLabel);

@@ -33,6 +33,7 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.operation.IRunnableWithProgress;
 import org.eclipse.jface.viewers.ComboViewer;
+import org.eclipse.jface.viewers.IElementComparer;
 import org.eclipse.jface.viewers.IOpenListener;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.ISelectionChangedListener;
@@ -79,11 +80,10 @@ import org.apache.maven.archetype.catalog.Archetype;
 import org.apache.maven.archetype.catalog.ArchetypeCatalog;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.repository.ArtifactRepository;
-import org.apache.maven.artifact.repository.DefaultArtifactRepository;
-import org.apache.maven.artifact.repository.layout.DefaultRepositoryLayout;
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 
 import org.eclipse.m2e.core.MavenPlugin;
+import org.eclipse.m2e.core.archetype.ArchetypeUtil;
 import org.eclipse.m2e.core.embedder.ArtifactKey;
 import org.eclipse.m2e.core.embedder.IMaven;
 import org.eclipse.m2e.core.internal.MavenPluginActivator;
@@ -254,8 +254,11 @@ public class MavenProjectWizardArchetypePage extends AbstractMavenWizardPage imp
           loadArchetypes(null, null, null);
         }
         //remember what was switched to here
-        if(dialogSettings != null && catalogFactory != null) {
-          dialogSettings.put(KEY_CATALOG, catalogFactory.getId());
+        if(dialogSettings != null) {
+          if(catalogFactory != null)
+            dialogSettings.put(KEY_CATALOG, catalogFactory.getId());
+          else
+            dialogSettings.put(KEY_CATALOG, ALL_CATALOGS);
         }
       }
     });
@@ -277,7 +280,9 @@ public class MavenProjectWizardArchetypePage extends AbstractMavenWizardPage imp
           catalogFactory = archetypeManager.getArchetypeCatalogFactory(NexusIndexerCatalogFactory.ID);
         }
 
-        catalogsComboViewer.setInput(archetypeManager.getArchetypeCatalogs());
+        ArrayList allCatalogs = new ArrayList(archetypeManager.getArchetypeCatalogs());
+        allCatalogs.add(0, ALL_CATALOGS);
+        catalogsComboViewer.setInput(allCatalogs);
         catalogsComboViewer.setSelection(new StructuredSelection(catalogFactory));
       }
     });
@@ -344,15 +349,15 @@ public class MavenProjectWizardArchetypePage extends AbstractMavenWizardPage imp
 
     TableColumn column1 = new TableColumn(table, SWT.LEFT);
     column1.setWidth(150);
-    column1.setText(Messages.wizardProjectPageArchetypeColumnGroupId); 
+    column1.setText(Messages.wizardProjectPageArchetypeColumnGroupId);
 
     TableColumn column0 = new TableColumn(table, SWT.LEFT);
     column0.setWidth(150);
-    column0.setText(Messages.wizardProjectPageArchetypeColumnArtifactId); 
+    column0.setText(Messages.wizardProjectPageArchetypeColumnArtifactId);
 
     TableColumn column2 = new TableColumn(table, SWT.LEFT);
     column2.setWidth(100);
-    column2.setText(Messages.wizardProjectPageArchetypeColumnVersion); 
+    column2.setText(Messages.wizardProjectPageArchetypeColumnVersion);
 
     GridData tableData = new GridData(SWT.FILL, SWT.FILL, true, true);
     tableData.widthHint = 400;
@@ -364,6 +369,22 @@ public class MavenProjectWizardArchetypePage extends AbstractMavenWizardPage imp
     viewer.setComparator(new ViewerComparator() {
       public int compare(Viewer viewer, Object e1, Object e2) {
         return ARCHETYPE_COMPARATOR.compare((Archetype) e1, (Archetype) e2);
+      }
+    });
+
+    viewer.setComparer(new IElementComparer() {
+      public int hashCode(Object obj) {
+        if(obj instanceof Archetype) {
+          return ArchetypeUtil.getHashCode((Archetype) obj);
+        }
+        return obj.hashCode();
+      }
+
+      public boolean equals(Object one, Object another) {
+        if(one instanceof Archetype && another instanceof Archetype) {
+          return ArchetypeUtil.areEqual((Archetype) one, (Archetype) another);
+        }
+        return one.equals(another);
       }
     });
 
@@ -450,7 +471,8 @@ public class MavenProjectWizardArchetypePage extends AbstractMavenWizardPage imp
     GridData buttonData = new GridData(SWT.LEFT, SWT.CENTER, true, false);
     buttonData.horizontalIndent = 25;
     includeShapshotsButton.setLayoutData(buttonData);
-    includeShapshotsButton.setText(org.eclipse.m2e.core.ui.internal.Messages.MavenProjectWizardArchetypePage_btnSnapshots);
+    includeShapshotsButton
+        .setText(org.eclipse.m2e.core.ui.internal.Messages.MavenProjectWizardArchetypePage_btnSnapshots);
     includeShapshotsButton.setSelection(DEFAULT_INCLUDE_SNAPSHOTS);
     includeShapshotsButton.addSelectionListener(versionFilter);
 
@@ -573,7 +595,7 @@ public class MavenProjectWizardArchetypePage extends AbstractMavenWizardPage imp
   }
 
   /**
-   * @deprecated this method is not used ad will be removed from 1.1 
+   * @deprecated this method is not used ad will be removed from 1.1
    */
   public Set<Archetype> filterVersions(Collection<Archetype> archetypes) {
     HashMap<String, Archetype> filteredArchetypes = new HashMap<String, Archetype>();
@@ -629,10 +651,13 @@ public class MavenProjectWizardArchetypePage extends AbstractMavenWizardPage imp
       ArchetypeManager archetypeManager = MavenPluginActivator.getDefault().getArchetypeManager();
       String catalogId = dialogSettings.get(KEY_CATALOG);
       catalogFactory = null;
-      if(catalogId != null) {
+      if(catalogId != null && !catalogId.equals(ALL_CATALOGS)) {
         catalogFactory = archetypeManager.getArchetypeCatalogFactory(catalogId);
       }
-      catalogsComboViewer.setSelection(new StructuredSelection(catalogFactory == null ? ALL_CATALOGS : catalogFactory));
+      if(catalogsComboViewer.getSelection().isEmpty()) {
+        catalogsComboViewer
+            .setSelection(new StructuredSelection(catalogFactory == null ? ALL_CATALOGS : catalogFactory));
+      }
 
       viewer.getTable().setFocus();
       Archetype selected = getArchetype();
@@ -745,10 +770,13 @@ public class MavenProjectWizardArchetypePage extends AbstractMavenWizardPage imp
 
             final List<ArtifactRepository> remoteRepositories;
             if(repositoryUrl.length() == 0) {
-              remoteRepositories = maven.getArtifactRepositories(); // XXX should use ArchetypeManager.getArhetypeRepositories()
+              remoteRepositories = maven.getArtifactRepositories(); // XXX should use ArchetypeManager.getArchetypeRepositories()
             } else {
-              ArtifactRepository repository = new DefaultArtifactRepository( //
-                  "archetype", repositoryUrl, new DefaultRepositoryLayout(), null, null); //$NON-NLS-1$
+              //Use id = archetypeArtifactId+"-repo" to enable mirror/proxy authentication 
+              //see http://maven.apache.org/archetype/maven-archetype-plugin/faq.html
+              ArtifactRepository repository = maven.createArtifactRepository(
+                  archetypeArtifactId + "-repo", repositoryUrl); //$NON-NLS-1$
+
               remoteRepositories = Collections.singletonList(repository);
             }
 
@@ -762,7 +790,8 @@ public class MavenProjectWizardArchetypePage extends AbstractMavenWizardPage imp
 
             File pomFile = pomArtifact.getFile();
             if(pomFile.exists()) {
-              monitor.subTask(org.eclipse.m2e.core.ui.internal.Messages.MavenProjectWizardArchetypePage_task_resolving2);
+              monitor
+                  .subTask(org.eclipse.m2e.core.ui.internal.Messages.MavenProjectWizardArchetypePage_task_resolving2);
               Artifact jarArtifact = maven.resolve(archetypeGroupId, archetypeArtifactId, archetypeVersion,
                   "jar", null, remoteRepositories, monitor); //$NON-NLS-1$
               monitor.worked(1);
@@ -784,7 +813,7 @@ public class MavenProjectWizardArchetypePage extends AbstractMavenWizardPage imp
               localIndex.addArtifact(jarFile, new ArtifactKey(pomArtifact));
 
               //save out the archetype
-              //TODO move this logig out of UI code!
+              //TODO move this logic out of UI code!
               Archetype archetype = new Archetype();
               archetype.setGroupId(archetypeGroupId);
               archetype.setArtifactId(archetypeArtifactId);
@@ -810,8 +839,9 @@ public class MavenProjectWizardArchetypePage extends AbstractMavenWizardPage imp
             throw ex;
 
           } catch(final Exception ex) {
-            final String msg = NLS.bind(
-                org.eclipse.m2e.core.ui.internal.Messages.MavenProjectWizardArchetypePage_error_resolve2, archetypeName);
+            final String msg = NLS
+                .bind(org.eclipse.m2e.core.ui.internal.Messages.MavenProjectWizardArchetypePage_error_resolve2,
+                    archetypeName);
             log.error(msg, ex);
             getShell().getDisplay().asyncExec(new Runnable() {
               public void run() {

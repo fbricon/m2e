@@ -13,22 +13,26 @@ package org.eclipse.m2e.core.ui.internal.util;
 
 import java.util.LinkedList;
 
-import org.apache.maven.execution.MavenExecutionRequest;
-import org.apache.maven.project.MavenProject;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
+
+import org.apache.maven.project.MavenProject;
+
 import org.eclipse.m2e.core.MavenPlugin;
+import org.eclipse.m2e.core.embedder.ICallable;
 import org.eclipse.m2e.core.embedder.IMaven;
+import org.eclipse.m2e.core.embedder.IMavenExecutionContext;
 import org.eclipse.m2e.core.project.IMavenProjectFacade;
 import org.eclipse.m2e.core.project.IMavenProjectRegistry;
 
+
 /**
- * Helper class to get the parent chain given a pom 
+ * Helper class to get the parent chain given a pom
  */
 public class ParentGatherer {
-  private MavenProject mavenProject;
+  final MavenProject mavenProject;
 
-  private IMavenProjectFacade projectFacade;
+  final IMavenProjectFacade projectFacade;
 
   public ParentGatherer(MavenProject leafProject, IMavenProjectFacade facade) {
     this.mavenProject = leafProject;
@@ -37,28 +41,34 @@ public class ParentGatherer {
 
   /**
    * Return the list of parents for a give pom
+   * 
    * @param monitor
-   * @return list of {@link MavenProject} from the given project to its ultimate parent. 
-   * The first entry is the given pom, the last one the ultimate parent.
+   * @return list of {@link MavenProject} from the given project to its ultimate parent. The first entry is the given
+   *         pom, the last one the ultimate parent.
    * @throws CoreException
    */
-  public LinkedList<MavenProject> getParentHierarchy(IProgressMonitor monitor) throws CoreException {
-    LinkedList<MavenProject> hierarchy = new LinkedList<MavenProject>();
-    IMaven maven = MavenPlugin.getMaven();
+  public LinkedList<MavenProject> getParentHierarchy(final IProgressMonitor monitor) throws CoreException {
+    final LinkedList<MavenProject> hierarchy = new LinkedList<MavenProject>();
+    final IMaven maven = MavenPlugin.getMaven();
     IMavenProjectRegistry projectManager = MavenPlugin.getMavenProjectRegistry();
     maven.detachFromSession(mavenProject);
 
     hierarchy.add(mavenProject);
 
-    MavenProject project = mavenProject;
-    while(project.getModel().getParent() != null) {
-      if(monitor.isCanceled()) {
+    projectManager.execute(projectFacade, new ICallable<Void>() {
+      public Void call(IMavenExecutionContext context, IProgressMonitor monitor) throws CoreException {
+        MavenProject project = mavenProject;
+        while(project.getModel().getParent() != null) {
+          if(monitor.isCanceled()) {
+            return null;
+          }
+          project = maven.resolveParentProject(project, monitor);
+          hierarchy.add(project);
+        }
         return null;
       }
-      MavenExecutionRequest request = projectManager.createExecutionRequest(projectFacade, monitor);
-      project = maven.resolveParentProject(request, project, monitor);
-      hierarchy.add(project);
-    }
+    }, monitor);
+
     return hierarchy;
   }
 }

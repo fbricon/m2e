@@ -14,15 +14,19 @@ package org.eclipse.m2e.internal.discovery;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.maven.execution.MavenExecutionRequest;
-import org.apache.maven.plugin.MojoExecution;
-import org.apache.maven.project.MavenProject;
+import org.osgi.framework.Bundle;
+import org.osgi.framework.ServiceFactory;
+import org.osgi.framework.ServiceRegistration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
@@ -41,8 +45,15 @@ import org.eclipse.equinox.p2.ui.ProvisioningUI;
 import org.eclipse.jface.operation.IRunnableContext;
 import org.eclipse.jface.operation.IRunnableWithProgress;
 import org.eclipse.jface.window.Window;
+import org.eclipse.osgi.util.NLS;
+import org.eclipse.ui.statushandlers.StatusManager;
+
+import org.apache.maven.plugin.MojoExecution;
+import org.apache.maven.project.MavenProject;
+
 import org.eclipse.m2e.core.MavenPlugin;
-import org.eclipse.m2e.core.embedder.IMaven;
+import org.eclipse.m2e.core.embedder.ICallable;
+import org.eclipse.m2e.core.embedder.IMavenExecutionContext;
 import org.eclipse.m2e.core.internal.lifecyclemapping.LifecycleMappingFactory;
 import org.eclipse.m2e.core.internal.lifecyclemapping.LifecycleMappingResult;
 import org.eclipse.m2e.core.internal.lifecyclemapping.MappingMetadataSource;
@@ -60,13 +71,6 @@ import org.eclipse.m2e.core.project.configurator.MojoExecutionKey;
 import org.eclipse.m2e.core.ui.internal.wizards.IMavenDiscoveryUI;
 import org.eclipse.m2e.internal.discovery.operation.MavenDiscoveryInstallOperation;
 import org.eclipse.m2e.internal.discovery.wizards.MavenDiscoveryUi;
-import org.eclipse.osgi.util.NLS;
-import org.eclipse.ui.statushandlers.StatusManager;
-import org.osgi.framework.Bundle;
-import org.osgi.framework.ServiceFactory;
-import org.osgi.framework.ServiceRegistration;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 @SuppressWarnings({"restriction", "rawtypes"})
@@ -116,10 +120,9 @@ public class MavenDiscoveryService implements IMavenDiscoveryUI, IMavenDiscovery
   public MavenDiscoveryService(boolean factory) {
   }
 
-  public Map<ILifecycleMappingRequirement, List<IMavenDiscoveryProposal>> discover(MavenProject mavenProject,
-      List<MojoExecution> mojoExecutions, List<IMavenDiscoveryProposal> preselected, IProgressMonitor monitor)
-      throws CoreException {
-    Map<ILifecycleMappingRequirement, List<IMavenDiscoveryProposal>> proposals = new LinkedHashMap<ILifecycleMappingRequirement, List<IMavenDiscoveryProposal>>();
+  public Map<ILifecycleMappingRequirement, List<IMavenDiscoveryProposal>> discover(final MavenProject mavenProject,
+      final List<MojoExecution> mojoExecutions, final List<IMavenDiscoveryProposal> preselected,
+      final IProgressMonitor monitor) throws CoreException {
 
     if(items == null) {
       items = new ArrayList<MavenDiscoveryService.CatalogItemCacheEntry>();
@@ -129,7 +132,7 @@ public class MavenDiscoveryService implements IMavenDiscoveryUI, IMavenDiscovery
 
       if(!status.isOK()) {
         log.error(status.toString());
-        return proposals;
+        return Collections.emptyMap();
       }
 
       IProvisioningAgent p2agent = ProvisioningUI.getDefaultUI().getSession().getProvisioningAgent();
@@ -148,9 +151,19 @@ public class MavenDiscoveryService implements IMavenDiscoveryUI, IMavenDiscovery
       catalog.dispose();
     }
 
-    IMaven maven = MavenPlugin.getMaven();
+    return MavenPlugin.getMaven().execute(
+        new ICallable<Map<ILifecycleMappingRequirement, List<IMavenDiscoveryProposal>>>() {
+          public Map<ILifecycleMappingRequirement, List<IMavenDiscoveryProposal>> call(IMavenExecutionContext context, IProgressMonitor monitor)
+              throws CoreException {
+            return discover0(mavenProject, mojoExecutions, preselected, monitor);
+          }
+        }, monitor);
+  }
 
-    MavenExecutionRequest request = maven.createExecutionRequest(monitor); // TODO this ignores workspace dependencies
+  /*package*/Map<ILifecycleMappingRequirement, List<IMavenDiscoveryProposal>> discover0(MavenProject mavenProject,
+      List<MojoExecution> mojoExecutions, List<IMavenDiscoveryProposal> preselected, IProgressMonitor monitor)
+      throws CoreException {
+    Map<ILifecycleMappingRequirement, List<IMavenDiscoveryProposal>> proposals = new LinkedHashMap<ILifecycleMappingRequirement, List<IMavenDiscoveryProposal>>();
 
     Collection<CatalogItem> selectedItems = toCatalogItems(preselected);
     List<LifecycleMappingMetadataSource> selectedSources = toMetadataSources(preselected);
@@ -180,11 +193,11 @@ public class MavenDiscoveryService implements IMavenDiscoveryUI, IMavenDiscovery
           sources.add(src);
         }
 
-        List<MappingMetadataSource> metadataSources = LifecycleMappingFactory.getProjectMetadataSources(request,
-            mavenProject, sources, mojoExecutions, false, monitor);
+        List<MappingMetadataSource> metadataSources = LifecycleMappingFactory.getProjectMetadataSources(mavenProject,
+            sources, mojoExecutions, false, monitor);
 
-        LifecycleMappingFactory.calculateEffectiveLifecycleMappingMetadata(mappingResult, request, metadataSources,
-            mavenProject, mojoExecutions, false);
+        LifecycleMappingFactory.calculateEffectiveLifecycleMappingMetadata(mappingResult, metadataSources,
+            mavenProject, mojoExecutions, false, monitor);
 
         LifecycleMappingMetadata lifecycleMappingMetadata = mappingResult.getLifecycleMappingMetadata();
         if(lifecycleMappingMetadata != null) {
@@ -208,7 +221,7 @@ public class MavenDiscoveryService implements IMavenDiscoveryUI, IMavenDiscovery
           if(entry.getValue() != null) {
             for(IPluginExecutionMetadata executionMapping : entry.getValue()) {
               log.debug("mapping proposal {} => {}", entry.getKey().toString(), executionMapping.getAction().toString()); //$NON-NLS-1$
-              IMavenDiscoveryProposal proposal = getProposal(((PluginExecutionMetadata)executionMapping).getSource());
+              IMavenDiscoveryProposal proposal = getProposal(((PluginExecutionMetadata) executionMapping).getSource());
               if(proposal != null) {
                 // assumes installation of mapping proposal installs all required project configurators 
                 put(proposals, new MojoExecutionMappingConfiguration.MojoExecutionMappingRequirement(entry.getKey()),

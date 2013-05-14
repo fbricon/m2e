@@ -1,8 +1,9 @@
 Manifest-Version: 1.0
 Bundle-Name: %Bundle-Name
-Bundle-RequiredExecutionEnvironment: J2SE-1.5, JavaSE-1.6
+Bundle-RequiredExecutionEnvironment: JavaSE-1.6,
+ JavaSE-1.7
 Bundle-Vendor: %Bundle-Vendor
-Bundle-Version: 1.1.0.qualifier
+Bundle-Version: 1.4.0.qualifier
 Bundle-ManifestVersion: 2
 Bundle-SymbolicName: org.eclipse.m2e.model.edit;singleton:=true
 Require-Bundle: org.eclipse.core.runtime,
@@ -17,7 +18,7 @@ Require-Bundle: org.eclipse.core.runtime,
  org.eclipse.wst.xsd.core;visibility:=reexport,
  org.eclipse.jem.util;visibility:=reexport,
  com.ibm.icu;bundle-version="4.0.1"
-Eclipse-LazyStart: true
+Bundle-ActivationPolicy: lazy
 Export-Package: org.eclipse.m2e.model.edit.pom;x-internal:=true,
  org.eclipse.m2e.model.edit.pom.impl;x-internal:=true,
  org.eclipse.m2e.model.edit.pom.provider;x-internal:=true,

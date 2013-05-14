@@ -239,8 +239,10 @@ public class Messages extends NLS {
   public static String pluginMarkerBuildError;
 
   public static String importProjectExists;
-  
+
   public static String buildConextFileAccessOutsideOfProjectBasedir;
+
+  public static String ProjectConversion_error_duplicate_conversion_participant;
 
   static {
     // initialize resource bundle

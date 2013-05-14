@@ -7,6 +7,7 @@
  *
  * Contributors:
  *      Sonatype, Inc. - initial API and implementation
+ *      Rob Newton - added warning preferences page
  *******************************************************************************/
 
 package org.eclipse.m2e.core.ui.internal;
@@ -30,7 +31,11 @@ public class Messages extends NLS {
 
   public static String AddDependencyDialog_artifactId_label;
 
+  public static String AddDependencyDialog_artifactId_error;
+
   public static String AddDependencyDialog_groupId_label;
+
+  public static String AddDependencyDialog_groupId_error;
 
   public static String AddDependencyDialog_scope_label;
 
@@ -119,6 +124,18 @@ public class Messages extends NLS {
   public static String LifecycleMappingPage_resolveLaterDescription;
 
   public static String LifecycleMappingPage_title;
+
+  public static String LifecycleMappingPreferencePage_Browse;
+
+  public static String LifecycleMappingPreferencePage_ChangeLocation;
+
+  public static String LifecycleMappingPreferencePage_ChooseNewLocation;
+
+  public static String LifecycleMappingPreferencePage_LifecycleMapping;
+
+  public static String LifecycleMappingPreferencePage_WorkspaceMappingsDescription;
+
+  public static String LifecycleMappingPreferencePage_WorkspaceMappingsOpen;
 
   public static String LifecycleMappingPropertyPage_copyToClipboard;
 
@@ -215,6 +232,14 @@ public class Messages extends NLS {
   public static String MavenImportWizardPage_inherited;
 
   public static String MavenImportWizardPage_title;
+
+  public static String MavenImportWizardPage_mntmSelectTree_text;
+
+  public static String MavenImportWizardPage_mntmDeselectTree_text;
+
+  public static String MavenImportWizardPage_btnSelectTree_text;
+
+  public static String MavenImportWizardPage_btnDeselectTree_text;
 
   public static String MavenImportWizard_titleIncompleteMapping;
 
@@ -548,6 +573,10 @@ public class Messages extends NLS {
 
   public static String MavenSettingsPreferencePage_title;
 
+  public static String MavenWarningsPreferencePage_groupidDupParent;
+
+  public static String MavenWarningsPreferencePage_versionDupParent;
+
   public static String MavenPreferencePage_warnIncompleteMapping;
 
   public static String OpenPomAction_33;
@@ -831,6 +860,32 @@ public class Messages extends NLS {
   public static String LifecycleMappingPropertyPage_mntmExpandAll_text;
 
   public static String LifecycleMappingPropertyPage_mntmCollapseAll_text;
+
+  public static String LifecycleMappingsViewer_trclmnSource_text;
+
+  public static String LifecycleMappingPreferencePage_btnRefreshLifecycles_text;
+
+  public static String LifecycleMappingPreferencePage_this_message;
+
+  public static String BuildDebugView_columnName;
+
+  public static String BuildDebugView_columnBuildNumber;
+
+  public static String BuildDebugView_nodeExecutions;
+
+  public static String BuildDebugView_nodeDelta;
+
+  public static String BuildDebugView_actionSuspend;
+
+  public static String BuildDebugView_actionClear;
+
+  public static String BuildDebugView_actionCollapseAll;
+
+  public static String BuildDebugView_errorTitle;
+
+  public static String BuildDebugView_errorDescription;
+
+  public static String UpdateMavenProjectsDialog_btnRefreshFromLocal_text;
 
   static {
     // initialize resource bundle

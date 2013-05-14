@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IProjectDescription;
+import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IConfigurationElement;
 import org.eclipse.core.runtime.IExecutableExtension;
@@ -33,12 +34,16 @@ import org.eclipse.core.runtime.Status;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
 
 import org.apache.maven.execution.MavenSession;
+import org.apache.maven.model.ConfigurationContainer;
+import org.apache.maven.model.Plugin;
 import org.apache.maven.model.PluginExecution;
 import org.apache.maven.plugin.MojoExecution;
+import org.apache.maven.project.MavenProject;
 
 import org.eclipse.m2e.core.MavenPlugin;
 import org.eclipse.m2e.core.embedder.IMaven;
 import org.eclipse.m2e.core.embedder.IMavenConfiguration;
+import org.eclipse.m2e.core.embedder.IMavenExecutionContext;
 import org.eclipse.m2e.core.internal.IMavenConstants;
 import org.eclipse.m2e.core.internal.Messages;
 import org.eclipse.m2e.core.internal.lifecyclemapping.LifecycleMappingFactory;
@@ -47,8 +52,8 @@ import org.eclipse.m2e.core.lifecyclemapping.model.IPluginExecutionMetadata;
 import org.eclipse.m2e.core.lifecyclemapping.model.PluginExecutionAction;
 import org.eclipse.m2e.core.project.IMavenProjectChangedListener;
 import org.eclipse.m2e.core.project.IMavenProjectFacade;
-import org.eclipse.m2e.core.project.MavenProjectChangedEvent;
 import org.eclipse.m2e.core.project.IMavenProjectRegistry;
+import org.eclipse.m2e.core.project.MavenProjectChangedEvent;
 
 
 /**
@@ -153,6 +158,15 @@ public abstract class AbstractProjectConfigurator implements IExecutableExtensio
 
   // TODO move to a helper
   public static void addNature(IProject project, String natureId, IProgressMonitor monitor) throws CoreException {
+    addNature(project, natureId, IResource.KEEP_HISTORY, monitor);
+  }
+
+  /**
+   * @since 1.3
+   */
+  // TODO move to a helper
+  public static void addNature(IProject project, String natureId, int updateFlags, IProgressMonitor monitor)
+      throws CoreException {
     if(!project.hasNature(natureId)) {
       IProjectDescription description = project.getDescription();
       String[] prevNatures = description.getNatureIds();
@@ -160,16 +174,32 @@ public abstract class AbstractProjectConfigurator implements IExecutableExtensio
       System.arraycopy(prevNatures, 0, newNatures, 1, prevNatures.length);
       newNatures[0] = natureId;
       description.setNatureIds(newNatures);
-      project.setDescription(description, monitor);
+      project.setDescription(description, updateFlags, monitor);
     }
   }
 
+  /**
+   * @deprecated this method does not properly join {@link IMavenExecutionContext}, use
+   *             {@link #getMojoParameterValue(String, Class, Plugin, ConfigurationContainer, String)} instead.
+   */
+  @SuppressWarnings("deprecation")
   protected <T> T getParameterValue(String parameter, Class<T> asType, MavenSession session, MojoExecution mojoExecution)
       throws CoreException {
     PluginExecution execution = new PluginExecution();
     execution.setConfiguration(mojoExecution.getConfiguration());
     return maven.getMojoParameterValue(parameter, asType, session, mojoExecution.getPlugin(), execution,
         mojoExecution.getGoal());
+  }
+
+  /**
+   * @since 1.4
+   */
+  protected <T> T getParameterValue(MavenProject project, String parameter, Class<T> asType,
+      MojoExecution mojoExecution, IProgressMonitor monitor) throws CoreException {
+    PluginExecution execution = new PluginExecution();
+    execution.setConfiguration(mojoExecution.getConfiguration());
+    return maven.getMojoParameterValue(project, parameter, asType, mojoExecution.getPlugin(), execution,
+        mojoExecution.getGoal(), monitor);
   }
 
   protected void assertHasNature(IProject project, String natureId) throws CoreException {

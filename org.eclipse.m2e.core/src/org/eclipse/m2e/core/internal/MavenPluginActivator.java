@@ -53,6 +53,7 @@ import org.sonatype.aether.RepositorySystem;
 import org.eclipse.m2e.core.MavenPlugin;
 import org.eclipse.m2e.core.embedder.IMaven;
 import org.eclipse.m2e.core.embedder.IMavenConfiguration;
+import org.eclipse.m2e.core.embedder.IMavenExecutionContext;
 import org.eclipse.m2e.core.embedder.MavenModelManager;
 import org.eclipse.m2e.core.embedder.MavenRuntimeManager;
 import org.eclipse.m2e.core.internal.archetype.ArchetypeCatalogFactory;
@@ -60,6 +61,7 @@ import org.eclipse.m2e.core.internal.archetype.ArchetypeManager;
 import org.eclipse.m2e.core.internal.embedder.MavenEmbeddedRuntime;
 import org.eclipse.m2e.core.internal.embedder.MavenImpl;
 import org.eclipse.m2e.core.internal.embedder.MavenWorkspaceRuntime;
+import org.eclipse.m2e.core.internal.embedder.TeslaWorkspaceRuntime;
 import org.eclipse.m2e.core.internal.index.IndexManager;
 import org.eclipse.m2e.core.internal.index.filter.ArtifactFilterManager;
 import org.eclipse.m2e.core.internal.index.nexus.IndexesExtensionReader;
@@ -218,7 +220,8 @@ public class MavenPluginActivator extends Plugin {
 
     this.runtimeManager = new MavenRuntimeManager();
     this.runtimeManager.setEmbeddedRuntime(new MavenEmbeddedRuntime(getBundleContext()));
-    this.runtimeManager.setWorkspaceRuntime(new MavenWorkspaceRuntime(projectManager));
+    this.runtimeManager.addWorkspaceRuntime(new MavenWorkspaceRuntime(projectManager));
+    this.runtimeManager.addWorkspaceRuntime(new TeslaWorkspaceRuntime(projectManager));
 
     this.configurationManager = new ProjectConfigurationManager(maven, managerImpl, modelManager, mavenMarkerManager,
         mavenConfiguration);
@@ -243,7 +246,7 @@ public class MavenPluginActivator extends Plugin {
 
     // fork repository registry update. must after index manager registered as a listener
     this.repositoryRegistry.updateRegistry();
-    
+
     this.projectConversionManager = new ProjectConversionManager();
   }
 
@@ -294,7 +297,7 @@ public class MavenPluginActivator extends Plugin {
     LifecycleMappingFactory.setBundleMetadataSources(null);
 
     this.projectConversionManager = null;
-    
+
     plugin = null;
   }
 
@@ -376,7 +379,8 @@ public class MavenPluginActivator extends Plugin {
 
   public static String getUserAgent() {
     // cast is necessary for eclipse 3.6 compatibility
-    String osgiVersion = (String) Platform.getBundle("org.eclipse.osgi").getHeaders().get(org.osgi.framework.Constants.BUNDLE_VERSION); //$NON-NLS-1$
+    String osgiVersion = (String) Platform
+        .getBundle("org.eclipse.osgi").getHeaders().get(org.osgi.framework.Constants.BUNDLE_VERSION); //$NON-NLS-1$
     String m2eVersion = plugin.qualifiedVersion;
     return "m2e/" + osgiVersion + "/" + m2eVersion; //$NON-NLS-1$
   }
@@ -429,6 +433,9 @@ public class MavenPluginActivator extends Plugin {
     return lookup(RepositorySystem.class);
   }
 
+  /**
+   * @deprecated use {@link IMavenExecutionContext} instead.
+   */
   public MavenSession setSession(MavenSession session) {
     LegacySupport legacy = lookup(LegacySupport.class);
     MavenSession old = legacy.getSession();

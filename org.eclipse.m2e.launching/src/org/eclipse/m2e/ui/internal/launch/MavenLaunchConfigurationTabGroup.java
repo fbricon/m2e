@@ -21,6 +21,7 @@ import org.eclipse.debug.ui.ILaunchConfigurationDialog;
 import org.eclipse.debug.ui.ILaunchConfigurationTab;
 import org.eclipse.debug.ui.RefreshTab;
 import org.eclipse.debug.ui.sourcelookup.SourceLookupTab;
+
 import org.eclipse.m2e.internal.launch.MavenLaunchParticipantInfo;
 
 
@@ -29,7 +30,7 @@ public class MavenLaunchConfigurationTabGroup extends AbstractLaunchConfiguratio
   public void createTabs(ILaunchConfigurationDialog dialog, String mode) {
     List<ILaunchConfigurationTab> tabs = new ArrayList<ILaunchConfigurationTab>();
 
-    tabs.add(new MavenLaunchMainTab(false));
+    tabs.add(new MavenLaunchMainTab());
     tabs.add(new MavenJRETab());
     tabs.add(new RefreshTab());
     tabs.add(new SourceLookupTab());
