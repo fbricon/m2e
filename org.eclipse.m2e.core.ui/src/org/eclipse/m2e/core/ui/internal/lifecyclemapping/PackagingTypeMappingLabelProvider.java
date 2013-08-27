@@ -14,7 +14,7 @@ import java.util.Collections;
 import org.apache.maven.project.MavenProject;
 
 import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.ILifecycleMappingRequirement;
-import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.LifecycleMappingConfiguration;
+import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.LifecycleMappingDiscoveryRequest;
 import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.PackagingTypeMappingConfiguration;
 import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.ProjectLifecycleMappingConfiguration;
 
@@ -44,8 +44,8 @@ public class PackagingTypeMappingLabelProvider implements ILifecycleMappingLabel
   /* (non-Javadoc)
    * @see org.eclipse.m2e.core.ui.internal.lifecyclemapping.ILifecycleMappingLabelProvider#isError()
    */
-  public boolean isError(LifecycleMappingConfiguration mappingConfiguration) {
-    return !mappingConfiguration.isRequirementSatisfied(getKey(), true);
+  public boolean isError(LifecycleMappingDiscoveryRequest mappingConfiguration) {
+    return !mappingConfiguration.isRequirementSatisfied(getKey());
   }
 
   /* (non-Javadoc)

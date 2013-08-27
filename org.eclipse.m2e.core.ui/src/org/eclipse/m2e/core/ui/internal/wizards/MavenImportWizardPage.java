@@ -43,7 +43,6 @@ import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.jface.viewers.SelectionChangedEvent;
 import org.eclipse.jface.viewers.StyledString;
 import org.eclipse.jface.viewers.Viewer;
-import org.eclipse.jface.wizard.IWizardPage;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.FocusAdapter;
@@ -71,7 +70,6 @@ import org.apache.maven.model.Parent;
 
 import org.eclipse.m2e.core.MavenPlugin;
 import org.eclipse.m2e.core.embedder.MavenModelManager;
-import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.LifecycleMappingConfiguration;
 import org.eclipse.m2e.core.project.AbstractProjectScanner;
 import org.eclipse.m2e.core.project.LocalProjectScanner;
 import org.eclipse.m2e.core.project.MavenProjectInfo;
@@ -221,7 +219,6 @@ public class MavenImportWizardPage extends AbstractMavenWizardPage {
     projectTreeViewer.addCheckStateListener(new ICheckStateListener() {
       public void checkStateChanged(CheckStateChangedEvent event) {
         updateCheckedState();
-        getMappingConfiguration().setSelectedProjects(getProjects());
         setPageComplete();
       }
     });
@@ -419,7 +416,6 @@ public class MavenImportWizardPage extends AbstractMavenWizardPage {
       getWizard().getContainer().run(true, true, new IRunnableWithProgress() {
         public void run(IProgressMonitor monitor) throws InvocationTargetException, InterruptedException {
           projectScanner.run(monitor);
-          ((MavenImportWizard) getWizard()).scanProjects(getProjects(projectScanner.getProjects()), monitor);
         }
 
         //this collects all projects for analyzing..
@@ -442,7 +438,6 @@ public class MavenImportWizardPage extends AbstractMavenWizardPage {
       setErrorMessage(null);
       setMessage(null);
       loadingErrorMessage = null;
-      LifecycleMappingConfiguration config = ((MavenImportWizard) getWizard()).getMappingConfiguration();
 
       // update name of working set
       MavenProjectInfo rootProject = getRootProject();
@@ -457,11 +452,8 @@ public class MavenImportWizardPage extends AbstractMavenWizardPage {
       //mkleint: XXX this sort of error handling is rather unfortunate
 
       List<Throwable> errors = new ArrayList<Throwable>(projectScanner.getErrors());
-      if(config != null) {
-        errors.addAll(config.getErrors().values());
-      }
       if(!errors.isEmpty()) {
-        StringBuffer sb = new StringBuffer(NLS.bind(Messages.wizardImportPageScanningErrors, errors.size()));
+        StringBuilder sb = new StringBuilder(NLS.bind(Messages.wizardImportPageScanningErrors, errors.size()));
         int n = 1;
         for(Throwable ex : errors) {
           if(ex instanceof CoreException) {
@@ -661,30 +653,15 @@ public class MavenImportWizardPage extends AbstractMavenWizardPage {
     projectTreeViewer.refresh();
   }
 
-  @Override
-  public IWizardPage getNextPage() {
-    IWizardPage next = super.getNextPage();
-    LifecycleMappingConfiguration config = getMappingConfiguration();
-    if(config == null || (config.isMappingComplete(true) && config.getAllProposals().isEmpty())) {
-      next = null;
-    }
-    return next;
-  }
-
   void setPageComplete() {
     Object[] checkedElements = projectTreeViewer.getCheckedElements();
     setPageComplete(checkedElements != null && checkedElements.length > 0);
-  }
-
-  LifecycleMappingConfiguration getMappingConfiguration() {
-    return ((MavenImportWizard) getWizard()).getMappingConfiguration();
   }
 
   void setProjectSubtreeChecked(boolean checked) {
     ITreeSelection selection = (ITreeSelection) projectTreeViewer.getSelection();
     projectTreeViewer.setSubtreeChecked(selection.getFirstElement(), checked);
     updateCheckedState();
-    getMappingConfiguration().setSelectedProjects(getProjects());
     setPageComplete();
   }
 

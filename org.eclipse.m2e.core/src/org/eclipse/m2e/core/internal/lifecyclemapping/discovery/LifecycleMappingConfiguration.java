@@ -52,10 +52,12 @@ import org.eclipse.m2e.core.internal.project.registry.ProjectRegistryManager;
 import org.eclipse.m2e.core.lifecyclemapping.model.IPluginExecutionMetadata;
 import org.eclipse.m2e.core.project.MavenProjectInfo;
 import org.eclipse.m2e.core.project.ProjectImportConfiguration;
+import org.eclipse.m2e.core.project.ResolverConfiguration;
 import org.eclipse.m2e.core.project.configurator.AbstractProjectConfigurator;
 import org.eclipse.m2e.core.project.configurator.MojoExecutionKey;
 
 
+@Deprecated
 public class LifecycleMappingConfiguration {
   private static final Logger log = LoggerFactory.getLogger(LifecycleMappingConfiguration.class);
 
@@ -253,14 +255,30 @@ public class LifecycleMappingConfiguration {
    * Calculates lifecycle mapping configuration of the specified projects. Only considers mapping metadata specified in
    * projects' pom.xml files and their parent pom.xml files. Does NOT consider mapping metadata available from installed
    * Eclipse plugins and m2e default lifecycle mapping metadata.
+   * 
+   * @deprecated use
+   *             {@link LifecycleMappingConfiguration#calculate(Collection, ResolverConfiguration, IProgressMonitor)}
    */
+  @Deprecated
   public static LifecycleMappingConfiguration calculate(final Collection<MavenProjectInfo> projects,
       final ProjectImportConfiguration importConfiguration, final IProgressMonitor monitor) {
+    return calculate(projects, importConfiguration.getResolverConfiguration(), monitor);
+  }
+
+  /**
+   * Calculates lifecycle mapping configuration of the specified projects. Only considers mapping metadata specified in
+   * projects' pom.xml files and their parent pom.xml files. Does NOT consider mapping metadata available from installed
+   * Eclipse plugins and m2e default lifecycle mapping metadata.
+   * 
+   * @since 1.5.0
+   */
+  public static LifecycleMappingConfiguration calculate(final Collection<MavenProjectInfo> projects,
+      final ResolverConfiguration resolverConfiguration, final IProgressMonitor monitor) {
     try {
       final IMavenExecutionContext context = MavenPlugin.getMaven().createExecutionContext();
       final MavenExecutionRequest request = context.getExecutionRequest();
-      request.addActiveProfiles(importConfiguration.getResolverConfiguration().getActiveProfileList());
-      request.addInactiveProfiles(importConfiguration.getResolverConfiguration().getInactiveProfileList());
+      request.addActiveProfiles(resolverConfiguration.getActiveProfileList());
+      request.addInactiveProfiles(resolverConfiguration.getInactiveProfileList());
       return context.execute(new ICallable<LifecycleMappingConfiguration>() {
         public LifecycleMappingConfiguration call(IMavenExecutionContext context, IProgressMonitor monitor) {
           return calculate(projects, monitor);
@@ -290,8 +308,8 @@ public class LifecycleMappingConfiguration {
       }
       MavenProject mavenProject = null;
       try {
-        SubMonitor subMmonitor = SubMonitor.convert(monitor, NLS.bind("Analysing {0}", projectInfo.getLabel()), 1);
-
+        SubMonitor subMmonitor = SubMonitor.convert(monitor, NLS.bind("Reading {0}", projectInfo.getLabel()), 1);
+        System.err.println("reading " + projectInfo.getLabel());
         MavenExecutionResult executionResult = maven.execute(new ICallable<MavenExecutionResult>() {
           public MavenExecutionResult call(IMavenExecutionContext context, IProgressMonitor monitor)
               throws CoreException {

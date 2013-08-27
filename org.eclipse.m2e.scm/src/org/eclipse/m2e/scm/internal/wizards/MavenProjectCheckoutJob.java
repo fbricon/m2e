@@ -16,7 +16,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +27,6 @@ import org.eclipse.core.resources.WorkspaceJob;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
-import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.IJobChangeEvent;
 import org.eclipse.core.runtime.jobs.ISchedulingRule;
@@ -53,14 +51,11 @@ import org.apache.maven.model.Model;
 
 import org.eclipse.m2e.core.MavenPlugin;
 import org.eclipse.m2e.core.embedder.MavenModelManager;
-import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.LifecycleMappingConfiguration;
-import org.eclipse.m2e.core.project.IMavenProjectImportResult;
 import org.eclipse.m2e.core.project.LocalProjectScanner;
 import org.eclipse.m2e.core.project.MavenProjectInfo;
 import org.eclipse.m2e.core.project.ProjectImportConfiguration;
-import org.eclipse.m2e.core.ui.internal.M2EUIPluginActivator;
 import org.eclipse.m2e.core.ui.internal.actions.OpenMavenConsoleAction;
-import org.eclipse.m2e.core.ui.internal.wizards.AbstactCreateMavenProjectJob;
+import org.eclipse.m2e.core.ui.internal.wizards.ImportMavenProjectsJob;
 import org.eclipse.m2e.core.ui.internal.wizards.MavenImportWizard;
 import org.eclipse.m2e.scm.MavenCheckoutOperation;
 import org.eclipse.m2e.scm.MavenProjectScmInfo;
@@ -216,37 +211,8 @@ public abstract class MavenProjectCheckoutJob extends WorkspaceJob {
       }
 
       if(checkoutAllProjects) {
-        if(M2EUIPluginActivator.getDefault().getMavenDiscovery() != null) {
-          final LifecycleMappingConfiguration mappingConfiguration = LifecycleMappingConfiguration.calculate(projects,
-              configuration, new NullProgressMonitor());
-          if(!mappingConfiguration.isMappingComplete(true)) {
+        WorkspaceJob job = new ImportMavenProjectsJob(projects, workingSets, configuration);
 
-            PlatformUI.getWorkbench().getDisplay().asyncExec(new Runnable() {
-              public void run() {
-                MavenImportWizard wizard = new MavenImportWizard(configuration, collectedLocations,
-                    mappingConfiguration);
-                wizard.setBasedirRemameRequired(true);
-                WizardDialog dialog = new WizardDialog(PlatformUI.getWorkbench().getDisplay().getActiveShell(), wizard);
-                int res = dialog.open();
-                if(res == Window.CANCEL) {
-                  cleanup(collectedLocations);
-                }
-              }
-            });
-            return;
-          }
-        }
-        WorkspaceJob job = new AbstactCreateMavenProjectJob(Messages.MavenProjectCheckoutJob_job, workingSets) {
-          @Override
-          protected List<IProject> doCreateMavenProjects(IProgressMonitor monitor) throws CoreException {
-            Set<MavenProjectInfo> projectSet = MavenPlugin.getProjectConfigurationManager().collectProjects(projects);
-
-            List<IMavenProjectImportResult> results = MavenPlugin.getProjectConfigurationManager().importProjects(
-                projectSet, configuration, monitor);
-
-            return toProjects(results);
-          }
-        };
         ISchedulingRule rule = ResourcesPlugin.getWorkspace().getRuleFactory()
             .modifyRule(ResourcesPlugin.getWorkspace().getRoot());
         job.setRule(rule);

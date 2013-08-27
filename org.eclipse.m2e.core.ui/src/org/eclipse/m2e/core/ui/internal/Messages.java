@@ -249,6 +249,8 @@ public class Messages extends NLS {
 
   public static String MavenImportWizard_messageIncompleteMapping;
 
+  public static String MavenImportWizard_errorScanningProjectsLM;
+
   public static String MavenImportWizard_searchingTaskTitle;
 
   public static String wizardImportValidatorProjectImported;

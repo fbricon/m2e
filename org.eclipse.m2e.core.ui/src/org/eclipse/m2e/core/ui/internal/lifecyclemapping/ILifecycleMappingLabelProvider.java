@@ -13,7 +13,7 @@ import java.util.Collection;
 import org.apache.maven.project.MavenProject;
 
 import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.ILifecycleMappingRequirement;
-import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.LifecycleMappingConfiguration;
+import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.LifecycleMappingDiscoveryRequest;
 
 
 /**
@@ -28,7 +28,7 @@ public interface ILifecycleMappingLabelProvider {
    */
   public String getMavenText();
 
-  public boolean isError(LifecycleMappingConfiguration mappingConfiguration);
+  public boolean isError(LifecycleMappingDiscoveryRequest mappingConfiguration);
 
   public ILifecycleMappingRequirement getKey();
 

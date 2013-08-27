@@ -8,6 +8,8 @@
 
 package org.eclipse.m2e.core.internal.lifecyclemapping.discovery;
 
+import org.eclipse.core.runtime.Assert;
+
 import org.eclipse.m2e.core.internal.lifecyclemapping.LifecycleMappingFactory;
 import org.eclipse.m2e.core.internal.lifecyclemapping.model.PluginExecutionMetadata;
 import org.eclipse.m2e.core.lifecyclemapping.model.IPluginExecutionMetadata;
@@ -24,13 +26,32 @@ public class MojoExecutionMappingConfiguration implements ILifecycleMappingEleme
   public static class MojoExecutionMappingRequirement implements ILifecycleMappingRequirement {
     private final MojoExecutionKey execution;
 
+    private String executionId;
+
+    private String packaging;
+
     public MojoExecutionMappingRequirement(MojoExecutionKey execution) {
+      Assert.isNotNull(execution);
       this.execution = new MojoExecutionKey(execution.getGroupId(), execution.getArtifactId(), execution.getVersion(),
           execution.getGoal(), null, null);
+
+      executionId = execution.getExecutionId();
+    }
+
+    /**
+     * @since 1.5.0
+     */
+    public MojoExecutionMappingRequirement(MojoExecutionKey execution, String packaging) {
+      this(execution);
+      this.packaging = packaging;
     }
 
     public int hashCode() {
-      return execution.hashCode();
+      int hash = execution.hashCode();
+      if(executionId != null) {
+        //hash = 17 * hash + executionId.hashCode();
+      }
+      return hash;
     }
 
     public boolean equals(Object obj) {
@@ -44,12 +65,33 @@ public class MojoExecutionMappingConfiguration implements ILifecycleMappingEleme
 
       MojoExecutionMappingRequirement other = (MojoExecutionMappingRequirement) obj;
 
+      if(packaging == null) {
+        if(other.getPackaging() != null) {
+          //return false;
+        }
+      } else if(!packaging.equals(other.getPackaging())) {
+        //return false;
+      }
+
       return execution.equals(other.execution);
+
+    }
+
+    public String getExecutionId() {
+      return executionId;
     }
 
     public MojoExecutionKey getExecution() {
       return execution;
     }
+
+    /**
+     * @since 1.5.0
+     */
+    public String getPackaging() {
+      return packaging;
+    }
+
   }
 
   public static class ProjectConfiguratorMappingRequirement implements ILifecycleMappingRequirement {

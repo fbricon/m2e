@@ -17,7 +17,7 @@ import org.apache.maven.project.MavenProject;
 
 import org.eclipse.m2e.core.internal.lifecyclemapping.LifecycleMappingFactory;
 import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.ILifecycleMappingRequirement;
-import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.LifecycleMappingConfiguration;
+import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.LifecycleMappingDiscoveryRequest;
 import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.MojoExecutionMappingConfiguration;
 import org.eclipse.m2e.core.internal.lifecyclemapping.discovery.ProjectLifecycleMappingConfiguration;
 import org.eclipse.m2e.core.project.configurator.MojoExecutionKey;
@@ -53,10 +53,10 @@ public class MojoExecutionMappingLabelProvider implements ILifecycleMappingLabel
   /* (non-Javadoc)
    * @see org.eclipse.m2e.core.ui.internal.lifecyclemapping.ILifecycleMappingLabelProvider#isError()
    */
-  public boolean isError(LifecycleMappingConfiguration mappingConfiguration) {
+  public boolean isError(LifecycleMappingDiscoveryRequest mappingConfiguration) {
     ILifecycleMappingRequirement requirement = element.getLifecycleMappingRequirement();
     return LifecycleMappingFactory.isInterestingPhase(element.getMojoExecutionKey().getLifecyclePhase())
-        && !mappingConfiguration.isRequirementSatisfied(requirement, true);
+        && !mappingConfiguration.isRequirementSatisfied(requirement);
   }
 
   /* (non-Javadoc)

@@ -63,7 +63,7 @@ public class InstallCatalogItemMavenDiscoveryProposal implements IMavenDiscovery
    * @see org.eclipse.m2e.core.internal.lifecyclemapping.discovery.IMavenDiscoveryProposal#getDescription()
    */
   public String getDescription() {
-    return item.getOverview().getSummary();
+    return item.getOverview() == null ? "" : item.getOverview().getSummary();
   }
 
   /* (non-Javadoc)
